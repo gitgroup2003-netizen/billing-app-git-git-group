@@ -1,0 +1,365 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1" />
+<title>ReceiptPro — Receipts, Invoices &amp; Billing</title>
+<meta name="description" content="Print receipts and invoices, manage billing, and analyze sales." />
+<link rel="manifest" href="manifest.json" />
+<meta name="theme-color" content="#12213D" />
+<link rel="apple-touch-icon" href="icons/icon-180.png" />
+<link rel="icon" href="icons/icon-32.png" />
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+
+<link rel="stylesheet" href="styles.css" />
+
+<!-- Supabase -->
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<!-- Exports -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.1/jspdf.plugin.autotable.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/docx@8.5.0/build/index.umd.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+<!-- Charts -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js"></script>
+</head>
+<body>
+
+<!-- ============ AUTH SCREEN ============ -->
+<div id="auth-screen">
+  <div class="auth-wrap">
+    <div class="auth-brand">
+      <div>
+        <div class="logo-mark">R</div>
+        <h1>Sell it.<br/>Print it.<br/>Track it.</h1>
+        <p>ReceiptPro turns your phone or laptop into a receipt counter — your logo, your templates, your numbers, backed up automatically.</p>
+      </div>
+      <div class="foot">A product by <b style="color:#fff">Gitgroup Group Home of Technologies</b><br/>Producer: Frank Ssemakula</div>
+    </div>
+    <div class="auth-form-pane">
+      <div class="auth-tabs">
+        <button class="auth-tab active" data-tab="login">Sign in</button>
+        <button class="auth-tab" data-tab="signup">Create account</button>
+      </div>
+      <div id="auth-error" class="hidden"></div>
+
+      <form id="login-form">
+        <div class="field">
+          <label>Email</label>
+          <input type="email" id="login-email" required placeholder="you@business.com" />
+        </div>
+        <div class="field">
+          <label>Password</label>
+          <input type="password" id="login-password" required placeholder="••••••••" />
+        </div>
+        <button class="btn btn-primary" type="submit" style="width:100%">Sign in</button>
+      </form>
+
+      <form id="signup-form" class="hidden">
+        <div class="field">
+          <label>Business name</label>
+          <input type="text" id="su-business" required placeholder="e.g. Marshalls Boutique" maxlength="60" />
+        </div>
+        <div class="grid-2">
+          <div class="field">
+            <label>Phone</label>
+            <input type="tel" id="su-phone" required placeholder="+256 7xx xxx xxx" />
+          </div>
+          <div class="field">
+            <label>Email</label>
+            <input type="email" id="su-email" required placeholder="you@business.com" />
+          </div>
+        </div>
+        <div class="field">
+          <label>Business address</label>
+          <input type="text" id="su-address" placeholder="Street, city, country" maxlength="80" />
+        </div>
+        <div class="grid-2">
+          <div class="field">
+            <label>Password</label>
+            <input type="password" id="su-password" required minlength="6" placeholder="min 6 characters" />
+          </div>
+          <div class="field">
+            <label>Business logo</label>
+            <input type="file" id="su-logo" accept="image/*" />
+          </div>
+        </div>
+        <button class="btn btn-amber" type="submit" style="width:100%">Create account</button>
+      </form>
+    </div>
+  </div>
+</div>
+
+<!-- ============ APP SHELL ============ -->
+<div id="app-shell" class="hidden">
+  <aside id="sidebar">
+    <div class="brand-row">
+      <div class="logo-mark">R</div>
+      <span>ReceiptPro</span>
+    </div>
+    <button class="nav-link active" data-nav="dashboard">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="9" rx="1"/><rect x="14" y="3" width="7" height="5" rx="1"/><rect x="14" y="12" width="7" height="9" rx="1"/><rect x="3" y="16" width="7" height="5" rx="1"/></svg>
+      <span class="nav-text">Dashboard</span>
+    </button>
+    <button class="nav-link" data-nav="new">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>
+      <span class="nav-text">New receipt</span>
+    </button>
+    <button class="nav-link" data-nav="receipts">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 2h9l3 3v17H6z"/><path d="M9 9h6M9 13h6M9 17h4"/></svg>
+      <span class="nav-text">Records</span>
+    </button>
+    <button class="nav-link" data-nav="analytics">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 3v18h18"/><path d="M7 15l4-5 3 3 5-7"/></svg>
+      <span class="nav-text">Analytics</span>
+    </button>
+    <button class="nav-link" data-nav="settings">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 00.3 1.9l.1.1a2 2 0 11-2.8 2.8l-.1-.1a1.7 1.7 0 00-1.9-.3 1.7 1.7 0 00-1 1.5V21a2 2 0 11-4 0v-.1a1.7 1.7 0 00-1-1.6 1.7 1.7 0 00-1.9.3l-.1.1a2 2 0 11-2.8-2.8l.1-.1a1.7 1.7 0 00.3-1.9 1.7 1.7 0 00-1.5-1H3a2 2 0 110-4h.1a1.7 1.7 0 001.5-1 1.7 1.7 0 00-.3-1.9l-.1-.1a2 2 0 112.8-2.8l.1.1a1.7 1.7 0 001.9.3H9a1.7 1.7 0 001-1.5V3a2 2 0 114 0v.1a1.7 1.7 0 001 1.5 1.7 1.7 0 001.9-.3l.1-.1a2 2 0 112.8 2.8l-.1.1a1.7 1.7 0 00-.3 1.9V9a1.7 1.7 0 001.5 1H21a2 2 0 110 4h-.1a1.7 1.7 0 00-1.5 1z"/></svg>
+      <span class="nav-text">Settings</span>
+    </button>
+    <button class="nav-link logout-link" style="margin-top:.5rem;color:#E3B45C">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4"/><path d="M16 17l5-5-5-5"/><path d="M21 12H9"/></svg>
+      <span class="nav-text">Sign out</span>
+    </button>
+    <div class="biz-card">
+      <b class="biz-name-slot truncate"></b>
+      <span class="biz-email-slot truncate"></span>
+    </div>
+  </aside>
+
+  <main id="main">
+
+    <!-- DASHBOARD -->
+    <section id="view-dashboard" class="view">
+      <div class="topbar">
+        <div>
+          <h2>Dashboard</h2>
+          <div class="sub">Today's overview at a glance</div>
+        </div>
+        <div style="display:flex;gap:.6rem">
+          <button class="btn btn-outline hidden" id="install-btn">Install app</button>
+          <button class="btn btn-amber" data-nav="new">+ New</button>
+        </div>
+      </div>
+      <div class="stats-grid">
+        <div class="stat-card"><div class="label">Total sales</div><div id="stat-total" class="value">—</div></div>
+        <div class="stat-card"><div class="label">Collected</div><div id="stat-paid" class="value green">—</div></div>
+        <div class="stat-card"><div class="label">Outstanding</div><div id="stat-outstanding" class="value amber">—</div></div>
+        <div class="stat-card"><div class="label">Records</div><div id="stat-count" class="value">—</div></div>
+      </div>
+      <div class="data-table">
+        <table>
+          <thead><tr><th>No</th><th>Customer</th><th class="col-hide-mobile">Date</th><th>Total</th><th>Status</th></tr></thead>
+          <tbody id="recent-table-body"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- NEW RECEIPT / BUILDER -->
+    <section id="view-new" class="view">
+      <div class="topbar">
+        <div>
+          <h2>New record</h2>
+          <div class="sub">Pick a template, add items, save and print</div>
+        </div>
+      </div>
+
+      <div style="display:flex;gap:1.4rem;flex-wrap:wrap;margin-bottom:1rem;align-items:center">
+        <label style="display:flex;align-items:center;gap:.4em;margin:0"><input type="radio" name="doctype" value="receipt" checked style="width:auto"/> Receipt</label>
+        <label style="display:flex;align-items:center;gap:.4em;margin:0"><input type="radio" name="doctype" value="invoice" style="width:auto"/> Invoice</label>
+      </div>
+
+      <div class="template-picker">
+        <div class="template-opt selected" data-template="marshalls">Retail slip</div>
+        <div class="template-opt" data-template="culinary">Business invoice</div>
+        <div class="template-opt" data-template="brentford">Academy slip</div>
+      </div>
+
+      <div class="builder-grid">
+        <div>
+          <div class="card" style="margin-bottom:1rem">
+            <div class="grid-2">
+              <div class="field">
+                <label>Doc number</label>
+                <input type="text" id="b-doc-number" maxlength="16" />
+              </div>
+              <div class="field">
+                <label>Status</label>
+                <select id="b-status">
+                  <option value="paid">Paid</option>
+                  <option value="partial">Partial</option>
+                  <option value="unpaid">Unpaid</option>
+                </select>
+              </div>
+            </div>
+            <div class="grid-2">
+              <div class="field">
+                <label>Customer name</label>
+                <input type="text" id="b-customer-name" maxlength="40" placeholder="Walk-in customer" />
+              </div>
+              <div class="field">
+                <label>Customer phone</label>
+                <input type="tel" id="b-customer-phone" maxlength="20" />
+              </div>
+            </div>
+            <div class="grid-2">
+              <div class="field">
+                <label>Payment method</label>
+                <select id="b-payment-method">
+                  <option>Cash</option>
+                  <option>Mobile Money</option>
+                  <option>Card</option>
+                  <option>Bank Transfer</option>
+                </select>
+              </div>
+              <div class="field">
+                <label>Note (optional)</label>
+                <input type="text" id="b-notes" maxlength="60" />
+              </div>
+            </div>
+          </div>
+
+          <div class="card">
+            <label style="margin-bottom:.6rem">Items</label>
+            <div class="items-table">
+              <table>
+                <thead><tr><th>Description</th><th>Qty</th><th>Unit price</th><th></th></tr></thead>
+                <tbody id="items-editor-body"></tbody>
+              </table>
+            </div>
+            <button class="btn btn-outline btn-sm" id="add-item-btn" style="margin-top:.8rem">+ Add item</button>
+          </div>
+        </div>
+
+        <div>
+          <div id="receipt-stage" class="receipt-stage tpl-marshalls">
+            <div id="receipt-print-area"></div>
+            <div class="receipt-actions">
+              <button class="btn btn-amber btn-sm" id="save-receipt-btn">Save &amp; Print</button>
+              <button class="btn btn-outline btn-sm" id="print-btn">Print only</button>
+              <button class="btn btn-outline btn-sm" id="share-btn">Share / Save image</button>
+            </div>
+          </div>
+          <div class="card" style="margin-top:1rem">
+            <label style="margin-bottom:.5rem">Paper size for printing</label>
+            <div style="display:flex;gap:.5rem;flex-wrap:wrap">
+              <button class="btn btn-outline btn-sm btn-amber" data-paper="80mm">80mm thermal</button>
+              <button class="btn btn-outline btn-sm" data-paper="58mm">58mm thermal</button>
+              <button class="btn btn-outline btn-sm" data-paper="a4">A4 / Letter</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- RECEIPTS / RECORDS -->
+    <section id="view-receipts" class="view">
+      <div class="topbar">
+        <div>
+          <h2>Records</h2>
+          <div class="sub">All receipts &amp; invoices</div>
+        </div>
+        <input type="search" id="receipts-search" placeholder="Search name or no." style="max-width:220px" />
+      </div>
+      <div class="data-table">
+        <table>
+          <thead><tr><th>No</th><th>Customer</th><th class="col-hide-mobile">Date</th><th>Total</th><th>Status</th><th></th></tr></thead>
+          <tbody id="receipts-table-body"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- ANALYTICS -->
+    <section id="view-analytics" class="view">
+      <div class="topbar">
+        <div>
+          <h2>Analytics</h2>
+          <div class="sub">Sales performance &amp; exports</div>
+        </div>
+      </div>
+      <div class="export-row">
+        <button class="btn btn-outline" id="export-excel-btn">Export Excel</button>
+        <button class="btn btn-outline" id="export-pdf-btn">Export PDF</button>
+        <button class="btn btn-outline" id="export-word-btn">Export Word</button>
+      </div>
+      <div class="stats-grid" style="grid-template-columns:repeat(3,1fr)">
+        <div class="stat-card"><div class="label">Records</div><div id="an-total-count" class="value">—</div></div>
+        <div class="stat-card"><div class="label">Total value</div><div id="an-total-value" class="value">—</div></div>
+        <div class="stat-card"><div class="label">Average sale</div><div id="an-avg-value" class="value">—</div></div>
+      </div>
+      <div class="chart-card">
+        <label>Sales — last 14 days</label>
+        <canvas id="sales-chart" height="90"></canvas>
+      </div>
+      <div class="chart-card">
+        <label>Status breakdown</label>
+        <canvas id="status-chart" height="140"></canvas>
+      </div>
+    </section>
+
+    <!-- SETTINGS -->
+    <section id="view-settings" class="view">
+      <div class="topbar">
+        <div>
+          <h2>Settings</h2>
+          <div class="sub">Business details used on your receipts</div>
+        </div>
+      </div>
+      <div class="card" style="max-width:520px">
+        <div class="logo-upload">
+          <img id="settings-logo-preview" class="logo-preview" alt="" />
+          <div>
+            <label style="margin-bottom:.3rem">Business logo</label>
+            <input type="file" id="settings-logo-input" accept="image/*" />
+          </div>
+        </div>
+        <form id="settings-form">
+          <div class="field"><label>Business name</label><input type="text" id="settings-business" maxlength="60" required /></div>
+          <div class="field"><label>Phone</label><input type="tel" id="settings-phone" maxlength="20" /></div>
+          <div class="field"><label>Address</label><input type="text" id="settings-address" maxlength="80" /></div>
+          <div class="field"><label>Email</label><input type="email" id="settings-email" disabled /></div>
+          <div class="field"><label>Tax rate (%)</label><input type="number" id="settings-tax" min="0" max="100" step="0.5" /></div>
+          <button class="btn btn-primary" type="submit">Save settings</button>
+        </form>
+      </div>
+    </section>
+
+  </main>
+</div>
+
+<!-- Mobile bottom tab bar -->
+<nav id="bottom-nav" class="hidden">
+  <button class="nav-link active" data-nav="dashboard">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="9" rx="1"/><rect x="14" y="3" width="7" height="5" rx="1"/><rect x="14" y="12" width="7" height="9" rx="1"/><rect x="3" y="16" width="7" height="5" rx="1"/></svg>
+    <span>Home</span>
+  </button>
+  <button class="nav-link" data-nav="new">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>
+    <span>New</span>
+  </button>
+  <button class="nav-link" data-nav="receipts">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 2h9l3 3v17H6z"/><path d="M9 9h6M9 13h6M9 17h4"/></svg>
+    <span>Records</span>
+  </button>
+  <button class="nav-link" data-nav="analytics">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 3v18h18"/><path d="M7 15l4-5 3 3 5-7"/></svg>
+    <span>Stats</span>
+  </button>
+  <button class="nav-link" data-nav="settings">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 00.3 1.9l.1.1a2 2 0 11-2.8 2.8l-.1-.1a1.7 1.7 0 00-1.9-.3 1.7 1.7 0 00-1 1.5V21a2 2 0 11-4 0v-.1a1.7 1.7 0 00-1-1.6 1.7 1.7 0 00-1.9.3l-.1.1a2 2 0 11-2.8-2.8l.1-.1a1.7 1.7 0 00.3-1.9 1.7 1.7 0 00-1.5-1H3a2 2 0 110-4h.1a1.7 1.7 0 001.5-1 1.7 1.7 0 00-.3-1.9l-.1-.1a2 2 0 112.8-2.8l.1.1a1.7 1.7 0 001.9.3H9a1.7 1.7 0 001-1.5V3a2 2 0 114 0v.1a1.7 1.7 0 001 1.5 1.7 1.7 0 001.9-.3l.1-.1a2 2 0 112.8 2.8l-.1.1a1.7 1.7 0 00-.3 1.9V9a1.7 1.7 0 001.5 1H21a2 2 0 110 4h-.1a1.7 1.7 0 00-1.5 1z"/></svg>
+    <span>Settings</span>
+  </button>
+</nav>
+
+<div id="toast"></div>
+
+<footer style="text-align:center;font-size:.72rem;color:var(--slate);padding:1rem 1rem 5.5rem" class="app-footer">
+  ReceiptPro — a product of <b>Gitgroup Group Home of Technologies</b> · Producer: Frank Ssemakula
+</footer>
+
+<script src="app.js"></script>
+</body>
+</html>
