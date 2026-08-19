@@ -90,8 +90,33 @@ create policy "Users can update their own logo"
   on storage.objects for update
   using (bucket_id = 'logos' and auth.uid()::text = (storage.foldername(name))[1]);
 
+-- 4. AUTO-CREATE PROFILE ON SIGNUP (server-side, bypasses RLS)
+-- This fires the moment a new auth user is created, using the
+-- business_name / phone / address passed as signup metadata from
+-- the app. It works whether or not "Confirm email" is enabled,
+-- because it runs in the database, not from the client's session.
+create or replace function public.handle_new_user()
+returns trigger as $$
+begin
+  insert into public.profiles (id, business_name, email, phone, address)
+  values (
+    new.id,
+    coalesce(new.raw_user_meta_data->>'business_name', 'My Business'),
+    new.email,
+    new.raw_user_meta_data->>'phone',
+    new.raw_user_meta_data->>'address'
+  )
+  on conflict (id) do nothing;
+  return new;
+end;
+$$ language plpgsql security definer set search_path = public;
+
+drop trigger if exists on_auth_user_created on auth.users;
+create trigger on_auth_user_created
+  after insert on auth.users
+  for each row execute function public.handle_new_user();
+
 -- ============================================================
--- Done. After running this, disable "Confirm email" under
--- Authentication → Providers → Email if you want instant sign-up,
--- or leave it on to require email confirmation.
+-- Done. "Confirm email" can stay ON or OFF under Authentication →
+-- Providers → Email — the trigger above makes signup work either way.
 -- ============================================================

@@ -76,33 +76,41 @@ document.getElementById("signup-form").addEventListener("submit", async (e) => {
   const btn = e.target.querySelector("button[type=submit]");
   btn.disabled = true; btn.textContent = "Creating account…";
 
-  const { data, error } = await sb.auth.signUp({ email, password });
+  // business_name / phone / address travel as user metadata so the
+  // database trigger (handle_new_user) can create the profile row —
+  // this works even when email confirmation is required and no
+  // session exists yet on the client.
+  const { data, error } = await sb.auth.signUp({
+    email, password,
+    options: { data: { business_name, phone, address } },
+  });
   if (error) { btn.disabled = false; btn.textContent = "Create account"; return showAuthError(error.message); }
 
   const userId = data.user ? data.user.id : null;
-  if (!userId) {
+  const hasSession = !!data.session;
+
+  if (!hasSession) {
+    // Email confirmation is required — the trigger already created the
+    // profile row; the user just needs to confirm before signing in.
     btn.disabled = false; btn.textContent = "Create account";
-    toast("Check your email to confirm, then sign in.");
+    toast("Account created — check your email to confirm, then sign in.");
     authTabs[0].click();
+    e.target.reset();
     return;
   }
 
-  let logo_url = null;
-  if (logoFile) {
+  // We have a live session already (confirmation disabled) — safe to
+  // upload the logo now and attach it to the profile the trigger made.
+  if (logoFile && userId) {
     const path = `${userId}/logo-${Date.now()}-${logoFile.name}`;
     const { error: upErr } = await sb.storage.from("logos").upload(path, logoFile, { upsert: true });
     if (!upErr) {
       const { data: pub } = sb.storage.from("logos").getPublicUrl(path);
-      logo_url = pub.publicUrl;
+      await sb.from("profiles").update({ logo_url: pub.publicUrl }).eq("id", userId);
     }
   }
 
-  const { error: profErr } = await sb.from("profiles").insert({
-    id: userId, business_name, email, phone, address, logo_url,
-  });
   btn.disabled = false; btn.textContent = "Create account";
-  if (profErr) return showAuthError(profErr.message);
-
   toast("Account created.");
   await afterAuth();
 });
