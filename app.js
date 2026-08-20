@@ -452,18 +452,47 @@ document.getElementById("save-receipt-btn").addEventListener("click", async () =
 });
 
 // ---------- Print / share current preview ----------
+// The printed page size is injected as a live <style> tag right
+// before printing, so the receipt/invoice is sized correctly for
+// whatever paper is selected — including "Auto", which lets the
+// printer's own loaded paper decide the page while keeping the
+// receipt itself centered and readable rather than stretched.
+const PAGE_SIZE_RULES = {
+  auto: "@page{ size:auto; margin:8mm; }",
+  "80mm": "@page{ size:80mm auto; margin:3mm; }",
+  "58mm": "@page{ size:58mm auto; margin:3mm; }",
+  a4: "@page{ size:A4; margin:15mm; }",
+};
+
+function applyPageSizeStyle(paper) {
+  let styleEl = document.getElementById("dynamic-page-size");
+  if (!styleEl) {
+    styleEl = document.createElement("style");
+    styleEl.id = "dynamic-page-size";
+    document.head.appendChild(styleEl);
+  }
+  styleEl.textContent = PAGE_SIZE_RULES[paper] || PAGE_SIZE_RULES.auto;
+}
+
 document.getElementById("print-btn").addEventListener("click", printCurrent);
-function printCurrent() { window.print(); }
+function printCurrent() {
+  applyPageSizeStyle(state.paperSize);
+  window.print();
+}
 
 document.querySelectorAll("[data-paper]").forEach((el) =>
   el.addEventListener("click", () => {
     document.querySelectorAll("[data-paper]").forEach((b) => b.classList.remove("btn-amber"));
     el.classList.add("btn-amber");
-    document.body.classList.remove("paper-80mm", "paper-58mm", "paper-a4");
+    state.paperSize = el.dataset.paper;
+    document.body.classList.remove("paper-auto", "paper-80mm", "paper-58mm", "paper-a4");
     document.body.classList.add(`paper-${el.dataset.paper}`);
+    applyPageSizeStyle(el.dataset.paper);
   })
 );
-document.body.classList.add("paper-80mm");
+state.paperSize = "auto";
+document.body.classList.add("paper-auto");
+applyPageSizeStyle("auto");
 
 function openReceiptForPrint(x) {
   goView("new");

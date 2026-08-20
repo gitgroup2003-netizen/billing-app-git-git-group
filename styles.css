@@ -204,22 +204,21 @@ table{ width:100%; border-collapse:collapse; }
 #toast.show{ opacity:1; transform:translateY(0); }
 
 /* ---------- Print ---------- */
-/* Paper-size classes toggle the @page + receipt width for thermal or A4 printers */
-body.paper-80mm #receipt-print-area{ width:80mm; }
-body.paper-58mm #receipt-print-area{ width:58mm; font-size:.68rem; }
-body.paper-a4 #receipt-print-area{ width:100%; max-width:480px; }
+/* "Auto" is the default: content is centered at a readable receipt
+   width but never overflows narrower paper, so it looks right on
+   A4, A5, invoice paper, or a thermal roll without the user picking
+   anything. The manual buttons override this for an exact thermal fit. */
+body.paper-auto #receipt-print-area{ width:85mm; max-width:100%; margin:0 auto; }
+body.paper-80mm #receipt-print-area{ width:80mm; max-width:100%; margin:0 auto; }
+body.paper-58mm #receipt-print-area{ width:58mm; max-width:100%; margin:0 auto; font-size:.68rem; }
+body.paper-a4 #receipt-print-area{ width:100%; max-width:480px; margin:0 auto; }
 
-@page{ margin:6mm; }
-body.paper-80mm{ }
+@page{ margin:8mm; }
 @media print{
   body *{ visibility:hidden; }
   #receipt-print-area, #receipt-print-area *{ visibility:visible; }
-  #receipt-print-area{ position:absolute; top:0; left:0; box-shadow:none; clip-path:none; }
-  body.paper-80mm #receipt-print-area{ width:80mm; }
-  body.paper-58mm #receipt-print-area{ width:58mm; }
-  body.paper-a4 #receipt-print-area{ width:100%; }
+  #receipt-print-area{ position:absolute; top:0; left:0; right:0; box-shadow:none; clip-path:none; }
   .receipt-actions{ display:none; }
-  @page{ size:auto; margin:4mm; }
 }
 
 /* ---------- Truncation helpers (keep text short on small screens) ---------- */

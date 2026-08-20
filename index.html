@@ -7,8 +7,8 @@
 <meta name="description" content="Print receipts and invoices, manage billing, and analyze sales." />
 <link rel="manifest" href="manifest.json" />
 <meta name="theme-color" content="#12213D" />
-<link rel="apple-touch-icon" href="icons/icon-180.png" />
-<link rel="icon" href="icons/icon-32.png" />
+<link rel="apple-touch-icon" href="icon-180.png" />
+<link rel="icon" href="icon-32.png" />
 
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
@@ -246,7 +246,8 @@
           <div class="card" style="margin-top:1rem">
             <label style="margin-bottom:.5rem">Paper size for printing</label>
             <div style="display:flex;gap:.5rem;flex-wrap:wrap">
-              <button class="btn btn-outline btn-sm btn-amber" data-paper="80mm">80mm thermal</button>
+              <button class="btn btn-outline btn-sm btn-amber" data-paper="auto">Auto (any printer)</button>
+              <button class="btn btn-outline btn-sm" data-paper="80mm">80mm thermal</button>
               <button class="btn btn-outline btn-sm" data-paper="58mm">58mm thermal</button>
               <button class="btn btn-outline btn-sm" data-paper="a4">A4 / Letter</button>
             </div>
