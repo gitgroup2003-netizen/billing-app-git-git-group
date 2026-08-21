@@ -112,6 +112,10 @@
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 2h9l3 3v17H6z"/><path d="M9 9h6M9 13h6M9 17h4"/></svg>
       <span class="nav-text">Records</span>
     </button>
+    <button class="nav-link" data-nav="finance">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 1v22M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6"/></svg>
+      <span class="nav-text">Finance</span>
+    </button>
     <button class="nav-link" data-nav="analytics">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 3v18h18"/><path d="M7 15l4-5 3 3 5-7"/></svg>
       <span class="nav-text">Analytics</span>
@@ -152,7 +156,7 @@
       </div>
       <div class="data-table">
         <table>
-          <thead><tr><th>No</th><th>Customer</th><th class="col-hide-mobile">Date</th><th>Total</th><th>Status</th></tr></thead>
+          <thead><tr><th>No</th><th>Customer</th><th class="col-hide-mobile">Date</th><th>Total</th><th class="col-hide-mobile">Balance</th><th>Status</th></tr></thead>
           <tbody id="recent-table-body"></tbody>
         </table>
       </div>
@@ -176,6 +180,8 @@
         <div class="template-opt selected" data-template="marshalls">Retail slip</div>
         <div class="template-opt" data-template="culinary">Business invoice</div>
         <div class="template-opt" data-template="brentford">Academy slip</div>
+        <div class="template-opt" data-template="bankslip">Bank deposit slip</div>
+        <div class="template-opt" data-template="statement">Account statement</div>
       </div>
 
       <div class="builder-grid">
@@ -216,9 +222,13 @@
                 </select>
               </div>
               <div class="field">
-                <label>Note (optional)</label>
-                <input type="text" id="b-notes" maxlength="60" />
+                <label>Amount paid <span style="font-weight:400;text-transform:none;color:var(--slate)">(if partial)</span></label>
+                <input type="number" id="b-amount-paid" min="0" step="1" />
               </div>
+            </div>
+            <div class="field">
+              <label>Note (optional)</label>
+              <input type="text" id="b-notes" maxlength="60" />
             </div>
           </div>
 
@@ -231,6 +241,14 @@
               </table>
             </div>
             <button class="btn btn-outline btn-sm" id="add-item-btn" style="margin-top:.8rem">+ Add item</button>
+          </div>
+
+          <div class="card" style="margin-top:1rem">
+            <label style="display:flex;align-items:center;gap:.5em;margin:0;font-weight:500;color:var(--ink)">
+              <input type="checkbox" id="b-signature-box" style="width:auto" checked />
+              Include signature / stamp box
+            </label>
+            <div class="sub" style="margin-top:.3rem">Adds a blank box on the printed document for a signature or company stamp</div>
           </div>
         </div>
 
@@ -267,11 +285,101 @@
       </div>
       <div class="data-table">
         <table>
-          <thead><tr><th>No</th><th>Customer</th><th class="col-hide-mobile">Date</th><th>Total</th><th>Status</th><th></th></tr></thead>
+          <thead><tr><th>No</th><th>Customer</th><th class="col-hide-mobile">Date</th><th>Total</th><th class="col-hide-mobile">Balance</th><th>Status</th><th></th></tr></thead>
           <tbody id="receipts-table-body"></tbody>
         </table>
       </div>
     </section>
+
+    <!-- PERSONAL FINANCE TRACKER (sub-app) -->
+    <section id="view-finance" class="view">
+      <div class="topbar">
+        <div>
+          <h2>Finance Tracker</h2>
+          <div class="sub">Your personal money in &amp; out — separate from your business records</div>
+        </div>
+        <button class="btn btn-outline btn-sm" id="finance-export-btn">Export Excel</button>
+      </div>
+
+      <div class="stats-grid" style="grid-template-columns:repeat(3,1fr)">
+        <div class="stat-card"><div class="label">Money in</div><div id="fin-total-in" class="value green">—</div></div>
+        <div class="stat-card"><div class="label">Money out</div><div id="fin-total-out" class="value" style="color:var(--red)">—</div></div>
+        <div class="stat-card"><div class="label">Balance</div><div id="fin-balance" class="value amber">—</div></div>
+      </div>
+
+      <div class="card" style="margin-bottom:1.4rem">
+        <div class="topbar" style="margin-bottom:1rem">
+          <div>
+            <label style="margin-bottom:.2rem">Monthly report</label>
+            <div class="sub" style="margin-top:0">Pick a month for a full breakdown, printable and exportable</div>
+          </div>
+          <input type="month" id="report-month" style="max-width:170px" />
+        </div>
+        <div id="report-summary-cards" class="stats-grid" style="grid-template-columns:repeat(3,1fr);margin-bottom:1rem"></div>
+        <div class="data-table" style="margin-bottom:1rem">
+          <table>
+            <thead><tr><th>Category</th><th>In</th><th>Out</th></tr></thead>
+            <tbody id="report-category-body"></tbody>
+          </table>
+        </div>
+        <div class="export-row" style="margin-bottom:0">
+          <button class="btn btn-amber btn-sm" id="report-print-btn">Print report</button>
+          <button class="btn btn-outline btn-sm" id="report-export-excel-btn">Export Excel</button>
+          <button class="btn btn-outline btn-sm" id="report-export-pdf-btn">Export PDF</button>
+          <button class="btn btn-outline btn-sm" id="report-export-word-btn">Export Word</button>
+        </div>
+      </div>
+
+      <div class="builder-grid" style="grid-template-columns:340px 1fr">
+        <div class="card">
+          <label style="margin-bottom:.8rem">Add transaction</label>
+          <form id="finance-form">
+            <div class="field" style="margin-bottom:.7rem">
+              <label>Type</label>
+              <div style="display:flex;gap:.6rem">
+                <label style="display:flex;align-items:center;gap:.4em;margin:0;font-weight:500;color:var(--ink)"><input type="radio" name="fin-kind" value="income" checked style="width:auto"/> Money in</label>
+                <label style="display:flex;align-items:center;gap:.4em;margin:0;font-weight:500;color:var(--ink)"><input type="radio" name="fin-kind" value="expense" style="width:auto"/> Money out</label>
+              </div>
+            </div>
+            <div class="field"><label>Amount</label><input type="number" id="fin-amount" min="0" step="1" required /></div>
+            <div class="field">
+              <label>Category</label>
+              <select id="fin-category">
+                <option>General</option>
+                <option>Salary / Income</option>
+                <option>Food</option>
+                <option>Transport</option>
+                <option>Rent</option>
+                <option>Utilities</option>
+                <option>Shopping</option>
+                <option>Health</option>
+                <option>Savings</option>
+                <option>Other</option>
+              </select>
+            </div>
+            <div class="field"><label>Note (optional)</label><input type="text" id="fin-note" maxlength="50" /></div>
+            <div class="field"><label>Date</label><input type="date" id="fin-date" /></div>
+            <button class="btn btn-amber" type="submit" style="width:100%">Add transaction</button>
+          </form>
+        </div>
+
+        <div>
+          <div class="chart-card">
+            <label>In vs Out — last 14 days</label>
+            <canvas id="finance-chart" height="90"></canvas>
+          </div>
+          <div class="data-table">
+            <table>
+              <thead><tr><th class="col-hide-mobile">Date</th><th>Category</th><th class="truncate" style="max-width:100px">Note</th><th>Amount</th><th></th></tr></thead>
+              <tbody id="finance-table-body"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Hidden print target for the monthly finance report -->
+    <div id="finance-report-print-area" style="display:none"></div>
 
     <!-- ANALYTICS -->
     <section id="view-analytics" class="view">
@@ -344,6 +452,10 @@
   <button class="nav-link" data-nav="receipts">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 2h9l3 3v17H6z"/><path d="M9 9h6M9 13h6M9 17h4"/></svg>
     <span>Records</span>
+  </button>
+  <button class="nav-link" data-nav="finance">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 1v22M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6"/></svg>
+    <span>Finance</span>
   </button>
   <button class="nav-link" data-nav="analytics">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 3v18h18"/><path d="M7 15l4-5 3 3 5-7"/></svg>

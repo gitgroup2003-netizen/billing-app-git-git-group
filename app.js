@@ -17,6 +17,7 @@ let state = {
   user: null,
   profile: null,
   receipts: [],
+  transactions: [],
   currentItems: [],
   template: "marshalls",
   docType: "receipt",
@@ -141,6 +142,7 @@ async function afterAuth() {
 
   populateBizUI();
   await loadReceipts();
+  await loadTransactions();
   goView("dashboard");
 }
 
@@ -169,6 +171,7 @@ function goView(name) {
   );
   if (name === "dashboard") renderDashboard();
   if (name === "receipts") renderReceiptsTable();
+  if (name === "finance") renderFinance();
   if (name === "analytics") renderAnalytics();
   if (name === "new") { resetBuilder(); }
   window.scrollTo(0, 0);
@@ -183,6 +186,16 @@ async function loadReceipts() {
     .order("created_at", { ascending: false });
   if (error) { toast("Could not load receipts"); return; }
   state.receipts = data || [];
+}
+
+async function loadTransactions() {
+  const { data, error } = await sb
+    .from("transactions")
+    .select("*")
+    .eq("user_id", state.user.id)
+    .order("occurred_on", { ascending: false });
+  if (error) { toast("Could not load finance data"); return; }
+  state.transactions = data || [];
 }
 
 // ---------- Dashboard ----------
@@ -201,7 +214,7 @@ function renderDashboard() {
   const tbody = document.getElementById("recent-table-body");
   tbody.innerHTML = "";
   r.slice(0, 6).forEach((x) => tbody.appendChild(receiptRow(x, true)));
-  if (!r.length) tbody.innerHTML = `<tr><td colspan="5" class="mono" style="color:var(--slate);padding:1.2em">No receipts yet — create your first one.</td></tr>`;
+  if (!r.length) tbody.innerHTML = `<tr><td colspan="6" class="mono" style="color:var(--slate);padding:1.2em">No receipts yet — create your first one.</td></tr>`;
 }
 
 // ---------- Receipts list ----------
@@ -213,18 +226,20 @@ function renderReceiptsTable() {
     !q || (x.customer_name || "").toLowerCase().includes(q) || (x.doc_number || "").toLowerCase().includes(q)
   );
   filtered.forEach((x) => tbody.appendChild(receiptRow(x, false)));
-  if (!filtered.length) tbody.innerHTML = `<tr><td colspan="6" class="mono" style="color:var(--slate);padding:1.2em">No matching records.</td></tr>`;
+  if (!filtered.length) tbody.innerHTML = `<tr><td colspan="7" class="mono" style="color:var(--slate);padding:1.2em">No matching records.</td></tr>`;
 }
 document.getElementById("receipts-search").addEventListener("input", renderReceiptsTable);
 
 function receiptRow(x, compact) {
   const tr = document.createElement("tr");
   const pillClass = x.status === "paid" ? "pill-paid" : x.status === "partial" ? "pill-partial" : "pill-unpaid";
+  const balance = Math.max(0, Number(x.total || 0) - Number(x.amount_paid || 0));
   tr.innerHTML = `
     <td class="mono truncate" style="max-width:90px">${short(x.doc_number, 12)}</td>
     <td class="truncate" style="max-width:140px">${short(x.customer_name || "Walk-in", 18)}</td>
     <td class="col-hide-mobile">${new Date(x.created_at).toLocaleDateString()}</td>
     <td class="mono">${fmt(x.total)}</td>
+    <td class="mono col-hide-mobile" style="${balance > 0 ? "color:var(--red);font-weight:700" : "color:var(--slate)"}">${balance > 0 ? fmt(balance) : "—"}</td>
     <td><span class="pill ${pillClass}">${x.status}</span></td>
     ${compact ? "" : `<td class="row-actions">
         <button class="btn btn-ghost btn-sm" data-view="${x.id}">View</button>
@@ -268,11 +283,26 @@ function resetBuilder() {
   document.getElementById("b-customer-phone").value = "";
   document.getElementById("b-status").value = "paid";
   document.getElementById("b-payment-method").value = "Cash";
+  document.getElementById("b-amount-paid").value = "";
+  document.getElementById("b-signature-box").checked = true;
   document.getElementById("b-notes").value = "";
   document.getElementById("b-doc-number").value = nextDocNumber();
   renderItemsEditor();
   renderPreview();
 }
+
+// Keep "Amount paid" sensible as status changes — full amount when
+// marked Paid, zero when Unpaid, and left editable for Partial.
+document.getElementById("b-status").addEventListener("change", () => {
+  const status = document.getElementById("b-status").value;
+  const { total } = computeTotals();
+  const paidInput = document.getElementById("b-amount-paid");
+  if (status === "paid") paidInput.value = total || "";
+  if (status === "unpaid") paidInput.value = 0;
+  renderPreview();
+});
+document.getElementById("b-amount-paid").addEventListener("input", renderPreview);
+document.getElementById("b-signature-box").addEventListener("change", renderPreview);
 
 function nextDocNumber() {
   const n = state.receipts.length + 1;
@@ -342,6 +372,25 @@ function renderPreview() {
   const status = document.getElementById("b-status").value;
   const dateStr = new Date().toLocaleDateString();
 
+  const amountPaidRaw = document.getElementById("b-amount-paid").value;
+  const amountPaid = amountPaidRaw === "" ? (status === "paid" ? total : 0) : Number(amountPaidRaw);
+  const balance = Math.max(0, total - amountPaid);
+  const showBalance = status !== "paid" && balance > 0;
+  const includeSignature = document.getElementById("b-signature-box").checked;
+
+  // Shared fragments reused across every template so balance-due and
+  // signature/stamp behave identically regardless of which layout is picked.
+  const balanceHtml = showBalance
+    ? `<div class="rc-row rc-paid-row"><span>Amount paid</span><span>${fmt(amountPaid)}</span></div>
+       <div class="rc-row rc-balance-row"><span>BALANCE DUE</span><span>${fmt(balance)}</span></div>`
+    : "";
+  const signatureHtml = includeSignature
+    ? `<div class="rc-sign-box">
+         <div class="box"><span>Signature</span></div>
+         <div class="box"><span>Stamp</span></div>
+       </div>`
+    : "";
+
   let html = "";
   if (state.template === "marshalls") {
     html = `
@@ -364,7 +413,9 @@ function renderPreview() {
       <div class="rc-row"><span>Subtotal</span><span>${fmt(subtotal)}</span></div>
       ${taxRate ? `<div class="rc-row"><span>Tax (${taxRate}%)</span><span>${fmt(taxAmount)}</span></div>` : ""}
       <div class="rc-row rc-total-row"><span>TOTAL</span><span>${fmt(total)}</span></div>
+      ${balanceHtml}
       <div class="rc-center"><span class="rc-badge">${status}</span></div>
+      ${signatureHtml}
       <div class="rc-thanks">Thank you for your business</div>
     `;
   } else if (state.template === "culinary") {
@@ -393,9 +444,12 @@ function renderPreview() {
       <div class="totals-row"><span>Subtotal</span><span>${fmt(subtotal)}</span></div>
       ${taxRate ? `<div class="totals-row"><span>Tax</span><span>${fmt(taxAmount)}</span></div>` : ""}
       <div class="totals-row grand"><span>Total</span><span>${fmt(total)}</span></div>
+      ${showBalance ? `<div class="totals-row rc-paid-row"><span>Amount paid</span><span>${fmt(amountPaid)}</span></div>
+        <div class="totals-row rc-balance-row"><span>Balance due</span><span>${fmt(balance)}</span></div>` : ""}
+      ${signatureHtml}
       <div class="rc-thanks">We deliver for a fee — Thank you!</div>
     `;
-  } else {
+  } else if (state.template === "brentford") {
     html = `
       <div class="rc-center">
         <div class="rc-biz-name">${escapeHtml(short(p.business_name, 24))}</div>
@@ -411,11 +465,61 @@ function renderPreview() {
       </div>
       <div class="rc-divider"></div>
       <div class="rc-row rc-total-row"><span>TOTAL</span><span>${fmt(total)}</span></div>
+      ${balanceHtml}
       <div class="rc-center" style="margin-top:.6em">
         <span class="rc-badge">${status}</span>
       </div>
+      ${signatureHtml}
       <div class="rc-thanks">Signature: ______________</div>
     `;
+  } else if (state.template === "bankslip") {
+    html = `
+      <div class="rc-slip-title">${escapeHtml(short(p.business_name, 26))}<br/><span style="font-size:.68rem;letter-spacing:.1em;color:#5B6472">DEPOSIT SLIP</span></div>
+      <div class="rc-slip-field"><span>Slip No.</span><b>${docNo}</b></div>
+      <div class="rc-slip-field"><span>Date</span><b>${dateStr}</b></div>
+      <div class="rc-slip-field"><span>Depositor</span><b>${escapeHtml(short(customer || "________________", 24))}</b></div>
+      <div class="rc-slip-field"><span>Contact</span><b>${escapeHtml(document.getElementById("b-customer-phone").value || "—")}</b></div>
+      <div class="rc-slip-field"><span>Payment method</span><b>${escapeHtml(document.getElementById("b-payment-method").value)}</b></div>
+      ${items.map((i) => `<div class="rc-slip-field"><span>${escapeHtml(short(i.description, 22))}</span><b>${fmt(i.qty * i.unit_price)}</b></div>`).join("")}
+      <div class="rc-slip-amount-box">
+        <div style="font-size:.65rem;color:#5B6472;letter-spacing:.05em">TOTAL DEPOSIT</div>
+        <div class="amt">${fmt(total)}</div>
+        ${showBalance ? `<div style="font-size:.7rem;margin-top:.3em;color:#B23A2E;font-weight:700">Balance due: ${fmt(balance)}</div>` : ""}
+        <div style="font-size:.65rem;margin-top:.3em"><span class="rc-badge" style="border-color:#2F6F4E;color:#1F4A34">${status}</span></div>
+      </div>
+      <div class="rc-slip-stamp">
+        <div>Depositor sign</div>
+        <div>Teller / Stamp</div>
+      </div>
+    `;
+  } else if (state.template === "statement") {
+    let running = 0;
+    const rows = items.map((i) => {
+      const amt = i.qty * i.unit_price;
+      running += amt;
+      return `<tr><td>${escapeHtml(short(i.description, 24))}</td><td>${fmt(amt)}</td><td>${fmt(running)}</td></tr>`;
+    }).join("");
+    html = `
+      <div class="rc-stmt-head">
+        <div class="biz">${escapeHtml(short(p.business_name, 28))}</div>
+        <div class="meta">${escapeHtml(short(p.address, 44))} · ${escapeHtml(p.phone || "")}</div>
+      </div>
+      <div class="rc-row" style="margin-bottom:.6em"><span>Statement No: ${docNo}</span><span>${dateStr}</span></div>
+      <div class="rc-biz-meta" style="margin-bottom:.6em">Account holder: ${escapeHtml(short(customer || "—", 30))}</div>
+      <table class="rc-stmt-table">
+        <thead><tr><th>Description</th><th>Amount</th><th>Balance</th></tr></thead>
+        <tbody>${rows}</tbody>
+        <tr class="rc-stmt-balance-row"><td>Closing balance</td><td></td><td>${fmt(running)}</td></tr>
+      </table>
+      <div class="rc-stmt-summary">
+        <span>${items.length} entr${items.length === 1 ? "y" : "ies"}</span>
+        <span><span class="rc-badge">${status}</span></span>
+      </div>
+      ${signatureHtml}
+      <div class="rc-thanks">This statement is system-generated</div>
+    `;
+  } else {
+    html = "";
   }
   document.getElementById("receipt-print-area").innerHTML = html;
 }
@@ -425,6 +529,9 @@ document.getElementById("save-receipt-btn").addEventListener("click", async () =
   const items = state.currentItems.filter((i) => i.description || i.qty || i.unit_price);
   if (!items.length) return toast("Add at least one item");
   const { subtotal, taxRate, taxAmount, total } = computeTotals();
+  const status = document.getElementById("b-status").value;
+  const amountPaidRaw = document.getElementById("b-amount-paid").value;
+  const amountPaid = amountPaidRaw === "" ? (status === "paid" ? total : 0) : Number(amountPaidRaw);
   const payload = {
     user_id: state.user.id,
     doc_type: state.docType,
@@ -434,8 +541,8 @@ document.getElementById("save-receipt-btn").addEventListener("click", async () =
     customer_phone: document.getElementById("b-customer-phone").value.trim(),
     items,
     subtotal, tax_rate: taxRate, tax_amount: taxAmount, total,
-    amount_paid: document.getElementById("b-status").value === "paid" ? total : 0,
-    status: document.getElementById("b-status").value,
+    amount_paid: amountPaid,
+    status,
     payment_method: document.getElementById("b-payment-method").value,
     notes: document.getElementById("b-notes").value.trim(),
   };
@@ -476,6 +583,7 @@ function applyPageSizeStyle(paper) {
 
 document.getElementById("print-btn").addEventListener("click", printCurrent);
 function printCurrent() {
+  document.body.dataset.printTarget = "receipt";
   applyPageSizeStyle(state.paperSize);
   window.print();
 }
@@ -505,6 +613,8 @@ function openReceiptForPrint(x) {
   document.getElementById("b-customer-phone").value = x.customer_phone || "";
   document.getElementById("b-status").value = x.status;
   document.getElementById("b-payment-method").value = x.payment_method || "Cash";
+  document.getElementById("b-amount-paid").value = x.amount_paid ?? "";
+  document.getElementById("b-signature-box").checked = true;
   document.getElementById("b-notes").value = x.notes || "";
   document.getElementById("b-doc-number").value = x.doc_number;
   renderItemsEditor();
@@ -526,6 +636,269 @@ document.getElementById("share-btn").addEventListener("click", async () => {
     a.download = "receipt.png";
     a.click();
   }, "image/png");
+});
+
+// ---------- Personal Finance Tracker (sub-app) ----------
+document.getElementById("fin-date").value = new Date().toISOString().slice(0, 10);
+
+document.getElementById("finance-form").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const amount = Number(document.getElementById("fin-amount").value || 0);
+  if (!amount) return toast("Enter an amount");
+  const payload = {
+    user_id: state.user.id,
+    kind: document.querySelector('input[name="fin-kind"]:checked').value,
+    amount,
+    category: document.getElementById("fin-category").value,
+    note: document.getElementById("fin-note").value.trim(),
+    occurred_on: document.getElementById("fin-date").value || new Date().toISOString().slice(0, 10),
+  };
+  const btn = e.target.querySelector("button[type=submit]");
+  btn.disabled = true; btn.textContent = "Adding…";
+  const { data, error } = await sb.from("transactions").insert(payload).select().single();
+  btn.disabled = false; btn.textContent = "Add transaction";
+  if (error) return toast("Could not save: " + error.message);
+  state.transactions.unshift(data);
+  document.getElementById("fin-amount").value = "";
+  document.getElementById("fin-note").value = "";
+  toast("Added");
+  renderFinance();
+});
+
+async function deleteTransaction(id) {
+  if (!confirm("Delete this entry?")) return;
+  const { error } = await sb.from("transactions").delete().eq("id", id).eq("user_id", state.user.id);
+  if (error) return toast("Delete failed");
+  state.transactions = state.transactions.filter((t) => t.id !== id);
+  renderFinance();
+  toast("Deleted");
+}
+
+let financeChart;
+function renderFinance() {
+  const t = state.transactions;
+  const totalIn = t.filter((x) => x.kind === "income").reduce((s, x) => s + Number(x.amount), 0);
+  const totalOut = t.filter((x) => x.kind === "expense").reduce((s, x) => s + Number(x.amount), 0);
+  document.getElementById("fin-total-in").textContent = fmt(totalIn);
+  document.getElementById("fin-total-out").textContent = fmt(totalOut);
+  document.getElementById("fin-balance").textContent = fmt(totalIn - totalOut);
+
+  const tbody = document.getElementById("finance-table-body");
+  tbody.innerHTML = "";
+  t.slice(0, 60).forEach((x) => {
+    const tr = document.createElement("tr");
+    const sign = x.kind === "income" ? "+" : "−";
+    const color = x.kind === "income" ? "var(--green)" : "var(--red)";
+    tr.innerHTML = `
+      <td class="col-hide-mobile">${new Date(x.occurred_on).toLocaleDateString()}</td>
+      <td class="truncate" style="max-width:100px">${short(x.category, 14)}</td>
+      <td class="truncate" style="max-width:100px">${short(x.note || "—", 16)}</td>
+      <td class="mono" style="color:${color};font-weight:700">${sign}${fmt(x.amount)}</td>
+      <td><button class="btn btn-danger btn-sm" data-fdel="${x.id}">✕</button></td>
+    `;
+    tr.querySelector("[data-fdel]").addEventListener("click", () => deleteTransaction(x.id));
+    tbody.appendChild(tr);
+  });
+  if (!t.length) tbody.innerHTML = `<tr><td colspan="5" class="mono" style="color:var(--slate);padding:1.2em">No transactions yet — add your first one.</td></tr>`;
+
+  const byDay = {};
+  t.forEach((x) => {
+    const d = new Date(x.occurred_on).toLocaleDateString("en-GB", { day: "2-digit", month: "short" });
+    byDay[d] = byDay[d] || { income: 0, expense: 0 };
+    byDay[d][x.kind] += Number(x.amount);
+  });
+  const labels = Object.keys(byDay).slice(-14);
+  const ctx = document.getElementById("finance-chart").getContext("2d");
+  if (financeChart) financeChart.destroy();
+  financeChart = new Chart(ctx, {
+    type: "bar",
+    data: {
+      labels,
+      datasets: [
+        { label: "In", data: labels.map((l) => byDay[l].income), backgroundColor: "#2F6F4E" },
+        { label: "Out", data: labels.map((l) => byDay[l].expense), backgroundColor: "#B23A2E" },
+      ],
+    },
+    options: { plugins: { legend: { position: "bottom" } }, scales: { y: { ticks: { callback: (v) => v.toLocaleString() } } } },
+  });
+
+  if (typeof renderMonthlyReport === "function") renderMonthlyReport();
+}
+
+document.getElementById("finance-export-btn").addEventListener("click", () => {
+  if (!state.transactions.length) return toast("Nothing to export yet");
+  const rows = state.transactions.map((x) => ({
+    Date: new Date(x.occurred_on).toLocaleDateString(),
+    Type: x.kind === "income" ? "Money In" : "Money Out",
+    Category: x.category,
+    Note: x.note || "",
+    Amount: x.amount,
+  }));
+  const ws = XLSX.utils.json_to_sheet(rows);
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, "Finance");
+  XLSX.writeFile(wb, `finance-export-${Date.now()}.xlsx`);
+});
+
+// ---------- Monthly finance report: analysis, print, export ----------
+const monthInput = document.getElementById("report-month");
+monthInput.value = new Date().toISOString().slice(0, 7);
+monthInput.addEventListener("change", renderMonthlyReport);
+
+function monthTransactions() {
+  const ym = monthInput.value || new Date().toISOString().slice(0, 7);
+  return { ym, rows: state.transactions.filter((x) => (x.occurred_on || "").slice(0, 7) === ym) };
+}
+
+function monthReportData() {
+  const { ym, rows } = monthTransactions();
+  const totalIn = rows.filter((x) => x.kind === "income").reduce((s, x) => s + Number(x.amount), 0);
+  const totalOut = rows.filter((x) => x.kind === "expense").reduce((s, x) => s + Number(x.amount), 0);
+  const byCat = {};
+  rows.forEach((x) => {
+    byCat[x.category] = byCat[x.category] || { income: 0, expense: 0 };
+    byCat[x.category][x.kind] += Number(x.amount);
+  });
+  const monthLabel = new Date(ym + "-01").toLocaleDateString("en-GB", { month: "long", year: "numeric" });
+  return { ym, monthLabel, rows, totalIn, totalOut, net: totalIn - totalOut, byCat };
+}
+
+function renderMonthlyReport() {
+  const { rows, totalIn, totalOut, net, byCat } = monthReportData();
+
+  document.getElementById("report-summary-cards").innerHTML = `
+    <div class="stat-card"><div class="label">Money in</div><div class="value green">${fmt(totalIn)}</div></div>
+    <div class="stat-card"><div class="label">Money out</div><div class="value" style="color:var(--red)">${fmt(totalOut)}</div></div>
+    <div class="stat-card"><div class="label">Net</div><div class="value amber">${fmt(net)}</div></div>
+  `;
+
+  const catBody = document.getElementById("report-category-body");
+  const cats = Object.keys(byCat);
+  catBody.innerHTML = cats.length
+    ? cats.map((c) => `<tr><td>${escapeHtml(c)}</td><td class="mono" style="color:var(--green)">${byCat[c].income ? fmt(byCat[c].income) : "—"}</td><td class="mono" style="color:var(--red)">${byCat[c].expense ? fmt(byCat[c].expense) : "—"}</td></tr>`).join("")
+    : `<tr><td colspan="3" class="mono" style="color:var(--slate);padding:1em">No transactions in this month yet.</td></tr>`;
+}
+renderMonthlyReport();
+
+function buildReportPrintHtml() {
+  const { monthLabel, rows, totalIn, totalOut, net, byCat } = monthReportData();
+  const p = state.profile || {};
+  const catRows = Object.keys(byCat).map((c) =>
+    `<tr><td>${escapeHtml(c)}</td><td>${byCat[c].income ? fmt(byCat[c].income) : "—"}</td><td>${byCat[c].expense ? fmt(byCat[c].expense) : "—"}</td></tr>`
+  ).join("");
+  const txRows = rows.map((x) =>
+    `<tr><td>${new Date(x.occurred_on).toLocaleDateString()}</td><td>${escapeHtml(x.category)}</td><td>${escapeHtml(x.note || "")}</td><td>${x.kind === "income" ? fmt(x.amount) : "—"}</td><td>${x.kind === "expense" ? fmt(x.amount) : "—"}</td></tr>`
+  ).join("");
+
+  return `
+    <div class="fr-head">
+      <div>
+        <div class="biz">${escapeHtml(p.business_name || "")}</div>
+        <div class="period">Personal finance report</div>
+      </div>
+      <div class="period">${monthLabel}</div>
+    </div>
+    <div class="fr-summary">
+      <div class="box"><div class="l">Money in</div><div class="v" style="color:#2F6F4E">${fmt(totalIn)}</div></div>
+      <div class="box"><div class="l">Money out</div><div class="v" style="color:#B23A2E">${fmt(totalOut)}</div></div>
+      <div class="box"><div class="l">Net</div><div class="v">${fmt(net)}</div></div>
+    </div>
+    <div style="padding:0 1.4em 1.4em">
+      <table class="fr-table">
+        <thead><tr><th>Category</th><th>In</th><th>Out</th></tr></thead>
+        <tbody>${catRows || `<tr><td colspan="3">No transactions this month.</td></tr>`}</tbody>
+      </table>
+    </div>
+    <div style="padding:0 1.4em 1.4em">
+      <table class="fr-table">
+        <thead><tr><th>Date</th><th>Category</th><th>Note</th><th>In</th><th>Out</th></tr></thead>
+        <tbody>${txRows || `<tr><td colspan="5">No transactions this month.</td></tr>`}</tbody>
+      </table>
+    </div>
+    <div class="fr-foot">Generated by ReceiptPro — Gitgroup Group Home of Technologies</div>
+  `;
+}
+
+document.getElementById("report-print-btn").addEventListener("click", () => {
+  document.getElementById("finance-report-print-area").innerHTML = buildReportPrintHtml();
+  document.body.dataset.printTarget = "report";
+  applyPageSizeStyle("a4");
+  window.print();
+});
+
+document.getElementById("report-export-excel-btn").addEventListener("click", () => {
+  const { rows, monthLabel } = monthReportData();
+  if (!rows.length) return toast("No transactions in this month");
+  const data = rows.map((x) => ({
+    Date: new Date(x.occurred_on).toLocaleDateString(),
+    Type: x.kind === "income" ? "Money In" : "Money Out",
+    Category: x.category,
+    Note: x.note || "",
+    Amount: x.amount,
+  }));
+  const ws = XLSX.utils.json_to_sheet(data);
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, "Report");
+  XLSX.writeFile(wb, `finance-report-${monthLabel.replace(/\s+/g, "-")}.xlsx`);
+});
+
+document.getElementById("report-export-pdf-btn").addEventListener("click", () => {
+  const { rows, monthLabel, totalIn, totalOut, net } = monthReportData();
+  if (!rows.length) return toast("No transactions in this month");
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF();
+  doc.setFontSize(14);
+  doc.text(`${state.profile.business_name} — Finance Report`, 14, 16);
+  doc.setFontSize(10);
+  doc.text(monthLabel, 14, 23);
+  doc.text(`In: ${fmt(totalIn)}   Out: ${fmt(totalOut)}   Net: ${fmt(net)}`, 14, 29);
+  doc.autoTable({
+    startY: 36,
+    head: [["Date", "Category", "Note", "In", "Out"]],
+    body: rows.map((x) => [
+      new Date(x.occurred_on).toLocaleDateString(), x.category, x.note || "",
+      x.kind === "income" ? fmt(x.amount) : "—",
+      x.kind === "expense" ? fmt(x.amount) : "—",
+    ]),
+    styles: { fontSize: 8 },
+    headStyles: { fillColor: [18, 33, 61] },
+  });
+  doc.save(`finance-report-${monthLabel.replace(/\s+/g, "-")}.pdf`);
+});
+
+document.getElementById("report-export-word-btn").addEventListener("click", async () => {
+  const { rows, monthLabel, totalIn, totalOut, net } = monthReportData();
+  if (!rows.length) return toast("No transactions in this month");
+  const { Document, Packer, Paragraph, Table, TableRow, TableCell, TextRun, HeadingLevel } = window.docx;
+  const headerCells = ["Date", "Category", "Note", "In", "Out"];
+  const table = new Table({
+    rows: [
+      new TableRow({ children: headerCells.map((h) => new TableCell({ children: [new Paragraph({ children: [new TextRun({ text: h, bold: true })] })] })) }),
+      ...rows.map((x) => new TableRow({
+        children: [
+          new Date(x.occurred_on).toLocaleDateString(), x.category, x.note || "",
+          x.kind === "income" ? fmt(x.amount) : "—",
+          x.kind === "expense" ? fmt(x.amount) : "—",
+        ].map((v) => new TableCell({ children: [new Paragraph(String(v))] })),
+      })),
+    ],
+  });
+  const doc = new Document({
+    sections: [{
+      children: [
+        new Paragraph({ text: `${state.profile.business_name} — Finance Report`, heading: HeadingLevel.HEADING_1 }),
+        new Paragraph({ text: monthLabel }),
+        new Paragraph({ text: `In: ${fmt(totalIn)}   Out: ${fmt(totalOut)}   Net: ${fmt(net)}` }),
+        new Paragraph({ text: "" }),
+        table,
+      ],
+    }],
+  });
+  const blob = await Packer.toBlob(doc);
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = `finance-report-${monthLabel.replace(/\s+/g, "-")}.docx`;
+  a.click();
 });
 
 // ---------- Analytics ----------
