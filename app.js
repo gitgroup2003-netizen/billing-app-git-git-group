@@ -234,10 +234,11 @@ function receiptRow(x, compact) {
   const tr = document.createElement("tr");
   const pillClass = x.status === "paid" ? "pill-paid" : x.status === "partial" ? "pill-partial" : "pill-unpaid";
   const balance = Math.max(0, Number(x.total || 0) - Number(x.amount_paid || 0));
+  const displayDate = x.doc_date ? new Date(x.doc_date + "T00:00:00") : new Date(x.created_at);
   tr.innerHTML = `
     <td class="mono truncate" style="max-width:90px">${short(x.doc_number, 12)}</td>
     <td class="truncate" style="max-width:140px">${short(x.customer_name || "Walk-in", 18)}</td>
-    <td class="col-hide-mobile">${new Date(x.created_at).toLocaleDateString()}</td>
+    <td class="col-hide-mobile">${displayDate.toLocaleDateString()}</td>
     <td class="mono">${fmt(x.total)}</td>
     <td class="mono col-hide-mobile" style="${balance > 0 ? "color:var(--red);font-weight:700" : "color:var(--slate)"}">${balance > 0 ? fmt(balance) : "—"}</td>
     <td><span class="pill ${pillClass}">${x.status}</span></td>
@@ -287,6 +288,7 @@ function resetBuilder() {
   document.getElementById("b-signature-box").checked = true;
   document.getElementById("b-notes").value = "";
   document.getElementById("b-doc-number").value = nextDocNumber();
+  document.getElementById("b-doc-date").value = new Date().toISOString().slice(0, 10);
   renderItemsEditor();
   renderPreview();
 }
@@ -322,14 +324,16 @@ function renderItemsEditor() {
   state.currentItems.forEach((item) => {
     const tr = document.createElement("tr");
     tr.innerHTML = `
-      <td style="width:44%"><input type="text" placeholder="Item description" value="${escapeHtml(item.description)}" data-field="description" maxlength="60" /></td>
-      <td style="width:16%"><input type="number" min="0" step="1" value="${item.qty}" data-field="qty" /></td>
-      <td style="width:26%"><input type="number" min="0" step="1" value="${item.unit_price}" data-field="unit_price" /></td>
+      <td style="width:36%"><input type="text" placeholder="Item description" value="${escapeHtml(item.description)}" data-field="description" maxlength="60" /></td>
+      <td style="width:12%"><input type="number" min="0" step="1" value="${item.qty}" data-field="qty" /></td>
+      <td style="width:22%"><input type="number" min="0" step="1" value="${item.unit_price}" data-field="unit_price" /></td>
+      <td style="width:20%" class="mono item-line-total" style="white-space:nowrap">${fmt(item.qty * item.unit_price)}</td>
       <td style="width:8%; text-align:right"><button class="item-remove" title="Remove">✕</button></td>
     `;
     tr.querySelectorAll("input").forEach((inp) =>
       inp.addEventListener("input", () => {
         item[inp.dataset.field] = inp.dataset.field === "description" ? inp.value : Number(inp.value || 0);
+        tr.querySelector(".item-line-total").textContent = fmt(item.qty * item.unit_price);
         renderPreview();
       })
     );
@@ -356,7 +360,7 @@ function escapeHtml(s) {
 }
 
 // ---------- Preview render (template-aware) ----------
-["b-customer-name", "b-customer-phone", "b-status", "b-payment-method", "b-notes", "b-doc-number"].forEach((id) => {
+["b-customer-name", "b-customer-phone", "b-status", "b-payment-method", "b-notes", "b-doc-number", "b-doc-date"].forEach((id) => {
   document.getElementById(id).addEventListener("input", renderPreview);
   document.getElementById(id).addEventListener("change", renderPreview);
 });
@@ -370,7 +374,12 @@ function renderPreview() {
   const docNo = document.getElementById("b-doc-number").value || nextDocNumber();
   const customer = document.getElementById("b-customer-name").value;
   const status = document.getElementById("b-status").value;
-  const dateStr = new Date().toLocaleDateString();
+  const docDateVal = document.getElementById("b-doc-date").value;
+  // Parsed as local time (not UTC) so the displayed date never shifts a
+  // day off from what was actually picked, including backdated dates.
+  const dateStr = docDateVal
+    ? new Date(docDateVal + "T00:00:00").toLocaleDateString()
+    : new Date().toLocaleDateString();
 
   const amountPaidRaw = document.getElementById("b-amount-paid").value;
   const amountPaid = amountPaidRaw === "" ? (status === "paid" ? total : 0) : Number(amountPaidRaw);
@@ -406,7 +415,8 @@ function renderPreview() {
       <div class="rc-divider"></div>
       <div class="rc-items">
         ${items.map((i) => `
-          <div class="rc-row"><span>${escapeHtml(short(i.description, 20))} x${i.qty}</span><span>${fmt(i.qty * i.unit_price)}</span></div>
+          <div class="rc-row"><span>${escapeHtml(short(i.description, 20))}</span><span>${fmt(i.qty * i.unit_price)}</span></div>
+          <div class="rc-row rc-item-detail"><span>${i.qty} x ${fmt(i.unit_price)}</span></div>
         `).join("")}
       </div>
       <div class="rc-divider"></div>
@@ -436,9 +446,9 @@ function renderPreview() {
       <div class="rc-divider"></div>
       <div class="rc-biz-meta">Bill to: ${escapeHtml(short(customer || "Walk-in customer", 30))}</div>
       <table class="rc-invoice-table">
-        <thead><tr><th>Item</th><th>Qty</th><th>Amount</th></tr></thead>
+        <thead><tr><th>Item</th><th>Qty</th><th>Unit price</th><th>Amount</th></tr></thead>
         <tbody>
-          ${items.map((i) => `<tr><td>${escapeHtml(short(i.description, 22))}</td><td>${i.qty}</td><td>${fmt(i.qty * i.unit_price)}</td></tr>`).join("")}
+          ${items.map((i) => `<tr><td>${escapeHtml(short(i.description, 22))}</td><td>${i.qty}</td><td>${fmt(i.unit_price)}</td><td>${fmt(i.qty * i.unit_price)}</td></tr>`).join("")}
         </tbody>
       </table>
       <div class="totals-row"><span>Subtotal</span><span>${fmt(subtotal)}</span></div>
@@ -461,7 +471,10 @@ function renderPreview() {
       <div class="rc-row"><span>Received from</span></div>
       <div style="font-weight:700;margin:.2em 0">${escapeHtml(short(customer || "________________", 26))}</div>
       <div class="rc-items">
-        ${items.map((i) => `<div class="rc-row"><span>${escapeHtml(short(i.description, 22))}</span><span>${fmt(i.qty * i.unit_price)}</span></div>`).join("")}
+        ${items.map((i) => `
+          <div class="rc-row"><span>${escapeHtml(short(i.description, 22))}</span><span>${fmt(i.qty * i.unit_price)}</span></div>
+          <div class="rc-row rc-item-detail"><span>${i.qty} x ${fmt(i.unit_price)}</span></div>
+        `).join("")}
       </div>
       <div class="rc-divider"></div>
       <div class="rc-row rc-total-row"><span>TOTAL</span><span>${fmt(total)}</span></div>
@@ -480,7 +493,7 @@ function renderPreview() {
       <div class="rc-slip-field"><span>Depositor</span><b>${escapeHtml(short(customer || "________________", 24))}</b></div>
       <div class="rc-slip-field"><span>Contact</span><b>${escapeHtml(document.getElementById("b-customer-phone").value || "—")}</b></div>
       <div class="rc-slip-field"><span>Payment method</span><b>${escapeHtml(document.getElementById("b-payment-method").value)}</b></div>
-      ${items.map((i) => `<div class="rc-slip-field"><span>${escapeHtml(short(i.description, 22))}</span><b>${fmt(i.qty * i.unit_price)}</b></div>`).join("")}
+      ${items.map((i) => `<div class="rc-slip-field"><span>${escapeHtml(short(i.description, 22))} <span style="color:#8a9a8a">(${i.qty} x ${fmt(i.unit_price)})</span></span><b>${fmt(i.qty * i.unit_price)}</b></div>`).join("")}
       <div class="rc-slip-amount-box">
         <div style="font-size:.65rem;color:#5B6472;letter-spacing:.05em">TOTAL DEPOSIT</div>
         <div class="amt">${fmt(total)}</div>
@@ -497,7 +510,7 @@ function renderPreview() {
     const rows = items.map((i) => {
       const amt = i.qty * i.unit_price;
       running += amt;
-      return `<tr><td>${escapeHtml(short(i.description, 24))}</td><td>${fmt(amt)}</td><td>${fmt(running)}</td></tr>`;
+      return `<tr><td>${escapeHtml(short(i.description, 24))}</td><td>${i.qty}</td><td>${fmt(i.unit_price)}</td><td>${fmt(amt)}</td><td>${fmt(running)}</td></tr>`;
     }).join("");
     html = `
       <div class="rc-stmt-head">
@@ -507,9 +520,9 @@ function renderPreview() {
       <div class="rc-row" style="margin-bottom:.6em"><span>Statement No: ${docNo}</span><span>${dateStr}</span></div>
       <div class="rc-biz-meta" style="margin-bottom:.6em">Account holder: ${escapeHtml(short(customer || "—", 30))}</div>
       <table class="rc-stmt-table">
-        <thead><tr><th>Description</th><th>Amount</th><th>Balance</th></tr></thead>
+        <thead><tr><th>Description</th><th>Qty</th><th>Unit price</th><th>Amount</th><th>Balance</th></tr></thead>
         <tbody>${rows}</tbody>
-        <tr class="rc-stmt-balance-row"><td>Closing balance</td><td></td><td>${fmt(running)}</td></tr>
+        <tr class="rc-stmt-balance-row"><td colspan="3">Closing balance</td><td></td><td>${fmt(running)}</td></tr>
       </table>
       <div class="rc-stmt-summary">
         <span>${items.length} entr${items.length === 1 ? "y" : "ies"}</span>
@@ -536,6 +549,7 @@ document.getElementById("save-receipt-btn").addEventListener("click", async () =
     user_id: state.user.id,
     doc_type: state.docType,
     doc_number: document.getElementById("b-doc-number").value || nextDocNumber(),
+    doc_date: document.getElementById("b-doc-date").value || new Date().toISOString().slice(0, 10),
     template: state.template,
     customer_name: document.getElementById("b-customer-name").value.trim(),
     customer_phone: document.getElementById("b-customer-phone").value.trim(),
@@ -617,6 +631,7 @@ function openReceiptForPrint(x) {
   document.getElementById("b-signature-box").checked = true;
   document.getElementById("b-notes").value = x.notes || "";
   document.getElementById("b-doc-number").value = x.doc_number;
+  document.getElementById("b-doc-date").value = x.doc_date || (x.created_at ? x.created_at.slice(0, 10) : new Date().toISOString().slice(0, 10));
   renderItemsEditor();
   renderPreview();
   toast("Loaded — edit and re-save to update, or just print.");

@@ -175,6 +175,8 @@ table{ width:100%; border-collapse:collapse; }
 .rc-divider{ border-top:1px dashed #999; margin:.7em 0; }
 .rc-row{ display:flex; justify-content:space-between; gap:.5em; }
 .rc-items .rc-row{ margin-bottom:.15em; }
+.rc-item-detail{ font-size:.68rem; color:#777; margin-bottom:.35em !important; }
+.rc-item-detail span{ margin-left:.4em; }
 .rc-total-row{ font-weight:700; font-size:.92rem; }
 .rc-paid-row{ color:#2F6F4E; }
 .rc-balance-row{ font-weight:700; color:#B23A2E; border-top:1px dashed #999; padding-top:.3em; margin-top:.2em; }
