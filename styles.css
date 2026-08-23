@@ -169,7 +169,7 @@ table{ width:100%; border-collapse:collapse; }
   padding-bottom: 1.4rem;
 }
 .rc-center{ text-align:center; }
-.rc-logo{ max-width:120px; max-height:120px; object-fit:contain; margin:0 auto .6rem; display:block; }
+.rc-logo{ width:65%; max-width:220px; max-height:220px; object-fit:contain; margin:0 auto .6rem; display:block; }
 .rc-biz-name{ font-family:'Fraunces',serif; font-weight:700; font-size:1.05rem; letter-spacing:.02em; }
 .rc-biz-meta{ font-size:.68rem; color:#444; }
 .rc-divider{ border-top:1px dashed #999; margin:.7em 0; }
