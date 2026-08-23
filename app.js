@@ -431,9 +431,9 @@ function renderPreview() {
     `;
   } else if (state.template === "culinary") {
     html = `
+      ${p.logo_url ? `<div class="rc-center"><img src="${p.logo_url}" class="rc-logo"/></div>` : ""}
       <div class="rc-row" style="align-items:flex-start">
         <div>
-          ${p.logo_url ? `<img src="${p.logo_url}" style="max-width:56px;max-height:56px;object-fit:contain"/>` : ""}
           <div class="rc-biz-name">${escapeHtml(short(p.business_name, 26))}</div>
           <div class="rc-biz-meta">${escapeHtml(p.phone || "")}</div>
           <div class="rc-biz-meta">${escapeHtml(p.email || "")}</div>
@@ -463,6 +463,7 @@ function renderPreview() {
   } else if (state.template === "brentford") {
     html = `
       <div class="rc-center">
+        ${p.logo_url ? `<img src="${p.logo_url}" class="rc-logo"/>` : ""}
         <div class="rc-biz-name">${escapeHtml(short(p.business_name, 24))}</div>
         <div class="rc-biz-meta">${escapeHtml(short(p.address, 40))}</div>
         <div class="rc-biz-meta">Tel: ${escapeHtml(p.phone || "")}</div>
@@ -519,6 +520,7 @@ function renderPreview() {
       return `<tr><td>${escapeHtml(short(i.description, 24))}</td><td>${i.qty}</td><td>${fmt(i.unit_price)}</td><td>${fmt(amt)}</td><td>${fmt(running)}</td></tr>`;
     }).join("");
     html = `
+      ${p.logo_url ? `<div class="rc-center"><img src="${p.logo_url}" class="rc-logo"/></div>` : ""}
       <div class="rc-stmt-head">
         <div class="biz">${escapeHtml(short(p.business_name, 28))}</div>
         <div class="meta">${escapeHtml(short(p.address, 44))} · ${escapeHtml(p.phone || "")}</div>

@@ -37,6 +37,7 @@ create table if not exists public.receipts (
   user_id uuid not null references auth.users (id) on delete cascade,
   doc_type text not null default 'receipt',       -- 'receipt' or 'invoice'
   doc_number text not null,
+  doc_date date not null default current_date,    -- editable/backdatable document date
   template text not null default 'classic',       -- 'marshalls' | 'culinary' | 'brentford'
   customer_name text,
   customer_phone text,
@@ -72,6 +73,39 @@ create policy "Users can delete own receipts"
   using (auth.uid() = user_id);
 
 create index if not exists receipts_user_id_idx on public.receipts (user_id, created_at desc);
+
+-- 4. PERSONAL FINANCE TRACKER (money in / money out, per user)
+create table if not exists public.transactions (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references auth.users (id) on delete cascade,
+  kind text not null default 'expense',        -- 'income' or 'expense'
+  amount numeric not null default 0,
+  category text default 'General',
+  note text,
+  occurred_on date not null default current_date,
+  created_at timestamptz default now()
+);
+
+alter table public.transactions enable row level security;
+
+create policy "Users can view own transactions"
+  on public.transactions for select
+  using (auth.uid() = user_id);
+
+create policy "Users can insert own transactions"
+  on public.transactions for insert
+  with check (auth.uid() = user_id);
+
+create policy "Users can update own transactions"
+  on public.transactions for update
+  using (auth.uid() = user_id);
+
+create policy "Users can delete own transactions"
+  on public.transactions for delete
+  using (auth.uid() = user_id);
+
+create index if not exists transactions_user_id_idx on public.transactions (user_id, occurred_on desc);
+
 
 -- 3. STORAGE BUCKET FOR BUSINESS LOGOS
 insert into storage.buckets (id, name, public)
