@@ -413,12 +413,13 @@ function renderPreview() {
       <div class="rc-row"><span>${docNo}</span><span>${dateStr}</span></div>
       ${customer ? `<div class="rc-row"><span>Customer</span><span>${escapeHtml(short(customer,20))}</span></div>` : ""}
       <div class="rc-divider"></div>
-      <div class="rc-items">
-        ${items.map((i) => `
-          <div class="rc-row"><span>${escapeHtml(short(i.description, 20))}</span><span>${fmt(i.qty * i.unit_price)}</span></div>
-          <div class="rc-row rc-item-detail"><span>${i.qty} x ${fmt(i.unit_price)}</span></div>
-        `).join("")}
-      </div>
+      <div class="rc-divider"></div>
+      <table class="rc-line-table">
+        <thead><tr><th>Item</th><th>Qty</th><th>Price</th><th>Total</th></tr></thead>
+        <tbody>
+          ${items.map((i) => `<tr><td>${escapeHtml(short(i.description, 22))}</td><td>${i.qty}</td><td>${fmt(i.unit_price)}</td><td>${fmt(i.qty * i.unit_price)}</td></tr>`).join("")}
+        </tbody>
+      </table>
       <div class="rc-divider"></div>
       <div class="rc-row"><span>Subtotal</span><span>${fmt(subtotal)}</span></div>
       ${taxRate ? `<div class="rc-row"><span>Tax (${taxRate}%)</span><span>${fmt(taxAmount)}</span></div>` : ""}
@@ -470,12 +471,12 @@ function renderPreview() {
       <div class="rc-row"><span>No: ${docNo}</span><span>${dateStr}</span></div>
       <div class="rc-row"><span>Received from</span></div>
       <div style="font-weight:700;margin:.2em 0">${escapeHtml(short(customer || "________________", 26))}</div>
-      <div class="rc-items">
-        ${items.map((i) => `
-          <div class="rc-row"><span>${escapeHtml(short(i.description, 22))}</span><span>${fmt(i.qty * i.unit_price)}</span></div>
-          <div class="rc-row rc-item-detail"><span>${i.qty} x ${fmt(i.unit_price)}</span></div>
-        `).join("")}
-      </div>
+      <table class="rc-line-table">
+        <thead><tr><th>Item</th><th>Qty</th><th>Price</th><th>Total</th></tr></thead>
+        <tbody>
+          ${items.map((i) => `<tr><td>${escapeHtml(short(i.description, 22))}</td><td>${i.qty}</td><td>${fmt(i.unit_price)}</td><td>${fmt(i.qty * i.unit_price)}</td></tr>`).join("")}
+        </tbody>
+      </table>
       <div class="rc-divider"></div>
       <div class="rc-row rc-total-row"><span>TOTAL</span><span>${fmt(total)}</span></div>
       ${balanceHtml}
@@ -493,7 +494,12 @@ function renderPreview() {
       <div class="rc-slip-field"><span>Depositor</span><b>${escapeHtml(short(customer || "________________", 24))}</b></div>
       <div class="rc-slip-field"><span>Contact</span><b>${escapeHtml(document.getElementById("b-customer-phone").value || "—")}</b></div>
       <div class="rc-slip-field"><span>Payment method</span><b>${escapeHtml(document.getElementById("b-payment-method").value)}</b></div>
-      ${items.map((i) => `<div class="rc-slip-field"><span>${escapeHtml(short(i.description, 22))} <span style="color:#8a9a8a">(${i.qty} x ${fmt(i.unit_price)})</span></span><b>${fmt(i.qty * i.unit_price)}</b></div>`).join("")}
+      <table class="rc-line-table" style="margin-top:.5em">
+        <thead><tr><th>Item</th><th>Qty</th><th>Price</th><th>Total</th></tr></thead>
+        <tbody>
+          ${items.map((i) => `<tr><td>${escapeHtml(short(i.description, 20))}</td><td>${i.qty}</td><td>${fmt(i.unit_price)}</td><td>${fmt(i.qty * i.unit_price)}</td></tr>`).join("")}
+        </tbody>
+      </table>
       <div class="rc-slip-amount-box">
         <div style="font-size:.65rem;color:#5B6472;letter-spacing:.05em">TOTAL DEPOSIT</div>
         <div class="amt">${fmt(total)}</div>

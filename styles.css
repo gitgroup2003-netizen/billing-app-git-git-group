@@ -177,6 +177,14 @@ table{ width:100%; border-collapse:collapse; }
 .rc-items .rc-row{ margin-bottom:.15em; }
 .rc-item-detail{ font-size:.68rem; color:#777; margin-bottom:.35em !important; }
 .rc-item-detail span{ margin-left:.4em; }
+
+/* Compact aligned item table for narrow/thermal templates —
+   Description | Qty | Unit price | Line total, all in clean columns */
+table.rc-line-table{ width:100%; border-collapse:collapse; margin:.3em 0; }
+table.rc-line-table th{ text-align:left; font-size:.62rem; text-transform:uppercase; letter-spacing:.03em; color:#777; border-bottom:1px solid #999; padding:.25em .2em; font-weight:600; }
+table.rc-line-table th:not(:first-child), table.rc-line-table td:not(:first-child){ text-align:right; }
+table.rc-line-table td{ padding:.3em .2em; border-bottom:1px dotted #ccc; font-size:.72rem; vertical-align:top; }
+table.rc-line-table td:first-child{ word-break:break-word; }
 .rc-total-row{ font-weight:700; font-size:.92rem; }
 .rc-paid-row{ color:#2F6F4E; }
 .rc-balance-row{ font-weight:700; color:#B23A2E; border-top:1px dashed #999; padding-top:.3em; margin-top:.2em; }
