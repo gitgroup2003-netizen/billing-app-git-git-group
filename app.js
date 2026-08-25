@@ -406,7 +406,7 @@ function renderPreview() {
   if (state.template === "marshalls") {
     html = `
       <div class="rc-center">
-        ${p.logo_url ? `<img src="${p.logo_url}" class="rc-logo"/>` : ""}
+        ${p.logo_url ? `<img src="${p.logo_url}" class="rc-logo" crossorigin="anonymous"/>` : ""}
         <div class="rc-biz-name">${escapeHtml(short(p.business_name, 26))}</div>
         <div class="rc-biz-meta">${escapeHtml(short(p.address, 40))}</div>
         <div class="rc-biz-meta">${escapeHtml(p.phone || "")}</div>
@@ -435,7 +435,7 @@ function renderPreview() {
     html = `
       <div class="rc-row" style="align-items:flex-start">
         <div>
-          ${p.logo_url ? `<img src="${p.logo_url}" style="max-width:56px;max-height:56px;object-fit:contain"/>` : ""}
+          ${p.logo_url ? `<img src="${p.logo_url}" class="rc-logo-inline" crossorigin="anonymous"/>` : ""}
           <div class="rc-biz-name">${escapeHtml(short(p.business_name, 26))}</div>
           <div class="rc-biz-meta">${escapeHtml(p.phone || "")}</div>
           <div class="rc-biz-meta">${escapeHtml(p.email || "")}</div>
@@ -697,20 +697,59 @@ function currentBuilderDocData() {
   };
 }
 
-function downloadReceiptPDF(doc) {
+// Fetches the business logo and prepares it for embedding into a
+// downloaded PDF or Word file. Returns null (never throws) if there's
+// no logo set, or if the fetch fails for any reason — exports still
+// work fine without a logo, they just skip it.
+async function loadLogoForExport(profile) {
+  if (!profile || !profile.logo_url) return null;
+  try {
+    const res = await fetch(profile.logo_url, { mode: "cors" });
+    if (!res.ok) throw new Error("logo fetch failed");
+    const blob = await res.blob();
+    const dataUrl = await new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result);
+      reader.onerror = reject;
+      reader.readAsDataURL(blob);
+    });
+    const { w, h } = await new Promise((resolve) => {
+      const img = new Image();
+      img.onload = () => resolve({ w: img.naturalWidth || 1, h: img.naturalHeight || 1 });
+      img.onerror = () => resolve({ w: 1, h: 1 });
+      img.src = dataUrl;
+    });
+    const format = blob.type.includes("png") ? "PNG" : "JPEG";
+    return { dataUrl, w, h, format, arrayBuffer: await blob.arrayBuffer() };
+  } catch (e) {
+    return null;
+  }
+}
+
+async function downloadReceiptPDF(doc) {
   if (!doc.items.length) return toast("No items to export");
   const { jsPDF } = window.jspdf;
   const pdf = new jsPDF();
+  const logo = await loadLogoForExport(doc.business);
+
+  // Logo sits top-left as a fixed-height box (max 22mm tall), text header
+  // shifts right to make room for it when a logo is present.
+  const textX = logo ? 40 : 14;
+  if (logo) {
+    const maxH = 22, maxW = 22;
+    const scale = Math.min(maxW / logo.w, maxH / logo.h);
+    pdf.addImage(logo.dataUrl, logo.format, 14, 10, logo.w * scale, logo.h * scale);
+  }
   pdf.setFontSize(15);
-  pdf.text(doc.business.business_name || "Receipt", 14, 18);
+  pdf.text(doc.business.business_name || "Receipt", textX, 18);
   pdf.setFontSize(9);
-  pdf.text(`${doc.business.address || ""}   ${doc.business.phone || ""}`, 14, 24);
+  pdf.text(`${doc.business.address || ""}   ${doc.business.phone || ""}`, textX, 24);
   pdf.setFontSize(11);
-  pdf.text(`${doc.docType === "invoice" ? "Invoice" : "Receipt"} No: ${doc.docNo}`, 14, 34);
-  pdf.text(`Date: ${doc.docDate.toLocaleDateString()}`, 14, 40);
-  pdf.text(`Customer: ${doc.customer || "Walk-in"}`, 14, 46);
+  pdf.text(`${doc.docType === "invoice" ? "Invoice" : "Receipt"} No: ${doc.docNo}`, 14, 38);
+  pdf.text(`Date: ${doc.docDate.toLocaleDateString()}`, 14, 44);
+  pdf.text(`Customer: ${doc.customer || "Walk-in"}`, 14, 50);
   pdf.autoTable({
-    startY: 54,
+    startY: 58,
     head: [["Item", "Qty", "Unit price", "Total"]],
     body: doc.items.map((i) => [i.description, i.qty, fmt(i.unit_price), fmt(i.qty * i.unit_price)]),
     styles: { fontSize: 9 },
@@ -754,7 +793,8 @@ function downloadReceiptExcel(doc) {
 
 async function downloadReceiptWord(doc) {
   if (!doc.items.length) return toast("No items to export");
-  const { Document, Packer, Paragraph, Table, TableRow, TableCell, TextRun, HeadingLevel } = window.docx;
+  const { Document, Packer, Paragraph, Table, TableRow, TableCell, TextRun, HeadingLevel, ImageRun } = window.docx;
+  const logo = await loadLogoForExport(doc.business);
   const headerCells = ["Item", "Qty", "Unit price", "Total"];
   const table = new Table({
     rows: [
@@ -773,9 +813,18 @@ async function downloadReceiptWord(doc) {
     ...(doc.status !== "paid" && doc.balance > 0 ? [`Amount paid: ${fmt(doc.amountPaid)}`, `Balance due: ${fmt(doc.balance)}`] : []),
     `Status: ${doc.status.toUpperCase()}`,
   ];
+  const logoParagraph = logo
+    ? new Paragraph({
+        children: [new ImageRun({
+          data: logo.arrayBuffer,
+          transformation: { width: 90, height: Math.round(90 * (logo.h / logo.w)) },
+        })],
+      })
+    : null;
   const wdoc = new Document({
     sections: [{
       children: [
+        ...(logoParagraph ? [logoParagraph] : []),
         new Paragraph({ text: doc.business.business_name || "Receipt", heading: HeadingLevel.HEADING_1 }),
         new Paragraph({ text: `${doc.docType === "invoice" ? "Invoice" : "Receipt"} No: ${doc.docNo}  ·  Date: ${doc.docDate.toLocaleDateString()}` }),
         new Paragraph({ text: `Customer: ${doc.customer || "Walk-in"}` }),
@@ -802,7 +851,7 @@ document.getElementById("download-word-btn").addEventListener("click", () => dow
 // (download + pre-filled chat/email) wherever it isn't.
 async function getReceiptImageBlob() {
   const node = document.getElementById("receipt-print-area");
-  const canvas = await html2canvas(node, { scale: 3, backgroundColor: "#ffffff" });
+  const canvas = await html2canvas(node, { scale: 3, backgroundColor: "#ffffff", useCORS: true });
   return new Promise((resolve) => canvas.toBlob(resolve, "image/png"));
 }
 
