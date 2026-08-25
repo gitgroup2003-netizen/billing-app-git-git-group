@@ -705,7 +705,7 @@ async function loadLogoForExport(profile) {
   if (!profile || !profile.logo_url) return null;
   try {
     const res = await fetch(profile.logo_url, { mode: "cors" });
-    if (!res.ok) throw new Error("logo fetch failed");
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const blob = await res.blob();
     const dataUrl = await new Promise((resolve, reject) => {
       const reader = new FileReader();
@@ -722,6 +722,8 @@ async function loadLogoForExport(profile) {
     const format = blob.type.includes("png") ? "PNG" : "JPEG";
     return { dataUrl, w, h, format, arrayBuffer: await blob.arrayBuffer() };
   } catch (e) {
+    console.error("Logo export failed:", e);
+    toast(`Logo couldn't be embedded (${e.message || "load error"}) — file downloaded without it.`);
     return null;
   }
 }
