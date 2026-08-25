@@ -431,9 +431,9 @@ function renderPreview() {
     `;
   } else if (state.template === "culinary") {
     html = `
-      ${p.logo_url ? `<div class="rc-center"><img src="${p.logo_url}" class="rc-logo"/></div>` : ""}
       <div class="rc-row" style="align-items:flex-start">
         <div>
+          ${p.logo_url ? `<img src="${p.logo_url}" style="max-width:56px;max-height:56px;object-fit:contain"/>` : ""}
           <div class="rc-biz-name">${escapeHtml(short(p.business_name, 26))}</div>
           <div class="rc-biz-meta">${escapeHtml(p.phone || "")}</div>
           <div class="rc-biz-meta">${escapeHtml(p.email || "")}</div>
@@ -463,7 +463,6 @@ function renderPreview() {
   } else if (state.template === "brentford") {
     html = `
       <div class="rc-center">
-        ${p.logo_url ? `<img src="${p.logo_url}" class="rc-logo"/>` : ""}
         <div class="rc-biz-name">${escapeHtml(short(p.business_name, 24))}</div>
         <div class="rc-biz-meta">${escapeHtml(short(p.address, 40))}</div>
         <div class="rc-biz-meta">Tel: ${escapeHtml(p.phone || "")}</div>
@@ -520,7 +519,6 @@ function renderPreview() {
       return `<tr><td>${escapeHtml(short(i.description, 24))}</td><td>${i.qty}</td><td>${fmt(i.unit_price)}</td><td>${fmt(amt)}</td><td>${fmt(running)}</td></tr>`;
     }).join("");
     html = `
-      ${p.logo_url ? `<div class="rc-center"><img src="${p.logo_url}" class="rc-logo"/></div>` : ""}
       <div class="rc-stmt-head">
         <div class="biz">${escapeHtml(short(p.business_name, 28))}</div>
         <div class="meta">${escapeHtml(short(p.address, 44))} · ${escapeHtml(p.phone || "")}</div>
@@ -646,19 +644,85 @@ function openReceiptForPrint(x) {
 }
 
 // ---------- Share as image (mobile-friendly alt to print) ----------
-document.getElementById("share-btn").addEventListener("click", async () => {
+// ---------- Share (WhatsApp, Email, Bluetooth, Nearby Share, etc.) ----------
+// A website can't push a file straight into WhatsApp/Bluetooth/Email itself —
+// only the operating system's own Share sheet can do that. These helpers hand
+// the receipt image to that native sheet wherever it's supported (most modern
+// mobile and desktop browsers), and fall back to a sensible manual flow
+// (download + pre-filled chat/email) wherever it isn't.
+async function getReceiptImageBlob() {
   const node = document.getElementById("receipt-print-area");
   const canvas = await html2canvas(node, { scale: 3, backgroundColor: "#ffffff" });
-  canvas.toBlob(async (blob) => {
-    const file = new File([blob], "receipt.png", { type: "image/png" });
-    if (navigator.share && navigator.canShare && navigator.canShare({ files: [file] })) {
-      try { await navigator.share({ files: [file], title: "Receipt" }); return; } catch (e) {}
-    }
-    const a = document.createElement("a");
-    a.href = URL.createObjectURL(blob);
-    a.download = "receipt.png";
-    a.click();
-  }, "image/png");
+  return new Promise((resolve) => canvas.toBlob(resolve, "image/png"));
+}
+
+function receiptShareSummary() {
+  const p = state.profile || {};
+  const docNo = document.getElementById("b-doc-number").value || "";
+  const { total } = computeTotals();
+  const customer = document.getElementById("b-customer-name").value;
+  return `${p.business_name || "Receipt"} — ${docNo}${customer ? ` for ${customer}` : ""} — Total ${fmt(total)}`;
+}
+
+function downloadBlob(blob, filename) {
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = filename;
+  a.click();
+}
+
+document.getElementById("share-btn").addEventListener("click", async () => {
+  const blob = await getReceiptImageBlob();
+  const file = new File([blob], "receipt.png", { type: "image/png" });
+  if (navigator.share && navigator.canShare && navigator.canShare({ files: [file] })) {
+    try {
+      await navigator.share({ files: [file], title: "Receipt", text: receiptShareSummary() });
+      return;
+    } catch (e) { /* user cancelled — fall through to manual save */ }
+  }
+  downloadBlob(blob, "receipt.png");
+  toast("Your device doesn't support direct sharing — image saved, attach it manually.");
+});
+
+document.getElementById("whatsapp-btn").addEventListener("click", async () => {
+  const blob = await getReceiptImageBlob();
+  const file = new File([blob], "receipt.png", { type: "image/png" });
+  const text = receiptShareSummary();
+  // Best path: native share sheet with WhatsApp pre-listed as a target and
+  // the image already attached — this is how it works on phones.
+  if (navigator.share && navigator.canShare && navigator.canShare({ files: [file] })) {
+    try {
+      await navigator.share({ files: [file], title: "Receipt", text });
+      return;
+    } catch (e) { return; }
+  }
+  // Desktop / unsupported fallback: open a WhatsApp chat with the summary
+  // pre-filled, and save the image so it can be attached in that chat.
+  downloadBlob(blob, "receipt.png");
+  window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, "_blank");
+  toast("Receipt image saved — attach it in the WhatsApp chat that just opened.");
+});
+
+document.getElementById("email-btn").addEventListener("click", async () => {
+  const blob = await getReceiptImageBlob();
+  const file = new File([blob], "receipt.png", { type: "image/png" });
+  const p = state.profile || {};
+  const docNo = document.getElementById("b-doc-number").value || "";
+  const subject = `${p.business_name || "Receipt"} — ${docNo}`;
+  const body = receiptShareSummary();
+  // Native share sheet: most phone mail apps (Gmail, Outlook, Mail) accept
+  // a shared file directly and open a real draft with it attached.
+  if (navigator.share && navigator.canShare && navigator.canShare({ files: [file] })) {
+    try {
+      await navigator.share({ files: [file], title: subject, text: body });
+      return;
+    } catch (e) { return; }
+  }
+  // Desktop fallback: mailto can't carry an attachment, so open a
+  // pre-filled draft and save the image for the user to attach.
+  downloadBlob(blob, "receipt.png");
+  window.location.href = `mailto:?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+  toast("Receipt image saved — attach it to the email draft that just opened.");
 });
 
 // ---------- Personal Finance Tracker (sub-app) ----------
