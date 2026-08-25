@@ -624,6 +624,15 @@ state.paperSize = "auto";
 document.body.classList.add("paper-auto");
 applyPageSizeStyle("auto");
 
+// Force-fix: guarantee the outline buttons inside the dark receipt
+// preview are readable regardless of CSS cache state, by setting their
+// colors directly via JS the moment the page loads.
+document.querySelectorAll(".receipt-stage .receipt-actions .btn-outline").forEach((btn) => {
+  btn.style.color = "#fff";
+  btn.style.borderColor = "#E3B45C";
+  btn.style.background = "rgba(255,255,255,.06)";
+});
+
 function openReceiptForPrint(x) {
   goView("new");
   state.docType = x.doc_type;
