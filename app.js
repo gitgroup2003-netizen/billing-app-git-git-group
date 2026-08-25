@@ -244,10 +244,12 @@ function receiptRow(x, compact) {
     <td><span class="pill ${pillClass}">${x.status}</span></td>
     ${compact ? "" : `<td class="row-actions">
         <button class="btn btn-ghost btn-sm" data-view="${x.id}">View</button>
+        <button class="btn btn-ghost btn-sm" data-pdf="${x.id}">PDF</button>
         <button class="btn btn-danger btn-sm" data-del="${x.id}">Delete</button>
       </td>`}
   `;
   tr.querySelector("[data-view]")?.addEventListener("click", () => openReceiptForPrint(x));
+  tr.querySelector("[data-pdf]")?.addEventListener("click", (e) => { e.stopPropagation(); downloadReceiptPDF(receiptToDocData(x)); });
   tr.querySelector("[data-del]")?.addEventListener("click", () => deleteReceipt(x.id));
   if (compact) tr.addEventListener("click", () => openReceiptForPrint(x));
   return tr;
@@ -644,6 +646,145 @@ function openReceiptForPrint(x) {
 }
 
 // ---------- Share as image (mobile-friendly alt to print) ----------
+// ---------- Single-document downloads: PDF / Excel / Word ----------
+// Works from two sources: a saved record straight from the Records list
+// (receiptToDocData), or whatever's currently in the builder, saved or not
+// (currentBuilderDocData) — same shape either way, same export functions.
+function receiptToDocData(x) {
+  const balance = Math.max(0, Number(x.total || 0) - Number(x.amount_paid || 0));
+  return {
+    business: state.profile || {},
+    docNo: x.doc_number,
+    docDate: x.doc_date ? new Date(x.doc_date + "T00:00:00") : new Date(x.created_at),
+    docType: x.doc_type,
+    customer: x.customer_name,
+    phone: x.customer_phone,
+    items: x.items || [],
+    subtotal: x.subtotal, taxRate: x.tax_rate, taxAmount: x.tax_amount, total: x.total,
+    amountPaid: x.amount_paid, balance, status: x.status,
+    paymentMethod: x.payment_method, notes: x.notes,
+  };
+}
+
+function currentBuilderDocData() {
+  const items = state.currentItems.filter((i) => i.description || i.qty || i.unit_price);
+  const { subtotal, taxRate, taxAmount, total } = computeTotals();
+  const status = document.getElementById("b-status").value;
+  const amountPaidRaw = document.getElementById("b-amount-paid").value;
+  const amountPaid = amountPaidRaw === "" ? (status === "paid" ? total : 0) : Number(amountPaidRaw);
+  const docDateVal = document.getElementById("b-doc-date").value;
+  return {
+    business: state.profile || {},
+    docNo: document.getElementById("b-doc-number").value || nextDocNumber(),
+    docDate: docDateVal ? new Date(docDateVal + "T00:00:00") : new Date(),
+    docType: state.docType,
+    customer: document.getElementById("b-customer-name").value,
+    phone: document.getElementById("b-customer-phone").value,
+    items,
+    subtotal, taxRate, taxAmount, total,
+    amountPaid, balance: Math.max(0, total - amountPaid), status,
+    paymentMethod: document.getElementById("b-payment-method").value,
+    notes: document.getElementById("b-notes").value,
+  };
+}
+
+function downloadReceiptPDF(doc) {
+  if (!doc.items.length) return toast("No items to export");
+  const { jsPDF } = window.jspdf;
+  const pdf = new jsPDF();
+  pdf.setFontSize(15);
+  pdf.text(doc.business.business_name || "Receipt", 14, 18);
+  pdf.setFontSize(9);
+  pdf.text(`${doc.business.address || ""}   ${doc.business.phone || ""}`, 14, 24);
+  pdf.setFontSize(11);
+  pdf.text(`${doc.docType === "invoice" ? "Invoice" : "Receipt"} No: ${doc.docNo}`, 14, 34);
+  pdf.text(`Date: ${doc.docDate.toLocaleDateString()}`, 14, 40);
+  pdf.text(`Customer: ${doc.customer || "Walk-in"}`, 14, 46);
+  pdf.autoTable({
+    startY: 54,
+    head: [["Item", "Qty", "Unit price", "Total"]],
+    body: doc.items.map((i) => [i.description, i.qty, fmt(i.unit_price), fmt(i.qty * i.unit_price)]),
+    styles: { fontSize: 9 },
+    headStyles: { fillColor: [18, 33, 61] },
+  });
+  let y = pdf.lastAutoTable.finalY + 8;
+  pdf.setFontSize(10);
+  pdf.text(`Subtotal: ${fmt(doc.subtotal)}`, 140, y); y += 6;
+  if (doc.taxRate) { pdf.text(`Tax (${doc.taxRate}%): ${fmt(doc.taxAmount)}`, 140, y); y += 6; }
+  pdf.setFontSize(12);
+  pdf.text(`Total: ${fmt(doc.total)}`, 140, y); y += 7;
+  if (doc.status !== "paid" && doc.balance > 0) {
+    pdf.setFontSize(10);
+    pdf.text(`Amount paid: ${fmt(doc.amountPaid)}`, 140, y); y += 6;
+    pdf.setFontSize(11);
+    pdf.text(`Balance due: ${fmt(doc.balance)}`, 140, y); y += 7;
+  }
+  pdf.setFontSize(9);
+  pdf.text(`Status: ${doc.status.toUpperCase()}   Payment: ${doc.paymentMethod || ""}`, 14, y + 4);
+  pdf.save(`${doc.docNo || "receipt"}.pdf`);
+}
+
+function downloadReceiptExcel(doc) {
+  if (!doc.items.length) return toast("No items to export");
+  const rows = doc.items.map((i) => ({
+    Description: i.description, Qty: i.qty, "Unit price": i.unit_price, Total: i.qty * i.unit_price,
+  }));
+  rows.push({});
+  rows.push({ Description: "Subtotal", Total: doc.subtotal });
+  if (doc.taxRate) rows.push({ Description: `Tax (${doc.taxRate}%)`, Total: doc.taxAmount });
+  rows.push({ Description: "TOTAL", Total: doc.total });
+  if (doc.status !== "paid" && doc.balance > 0) {
+    rows.push({ Description: "Amount paid", Total: doc.amountPaid });
+    rows.push({ Description: "Balance due", Total: doc.balance });
+  }
+  const ws = XLSX.utils.json_to_sheet(rows);
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, doc.docNo || "Receipt");
+  XLSX.writeFile(wb, `${doc.docNo || "receipt"}.xlsx`);
+}
+
+async function downloadReceiptWord(doc) {
+  if (!doc.items.length) return toast("No items to export");
+  const { Document, Packer, Paragraph, Table, TableRow, TableCell, TextRun, HeadingLevel } = window.docx;
+  const headerCells = ["Item", "Qty", "Unit price", "Total"];
+  const table = new Table({
+    rows: [
+      new TableRow({ children: headerCells.map((h) => new TableCell({ children: [new Paragraph({ children: [new TextRun({ text: h, bold: true })] })] })) }),
+      ...doc.items.map((i) => new TableRow({
+        children: [i.description, String(i.qty), fmt(i.unit_price), fmt(i.qty * i.unit_price)].map(
+          (v) => new TableCell({ children: [new Paragraph(String(v))] })
+        ),
+      })),
+    ],
+  });
+  const summaryLines = [
+    `Subtotal: ${fmt(doc.subtotal)}`,
+    ...(doc.taxRate ? [`Tax (${doc.taxRate}%): ${fmt(doc.taxAmount)}`] : []),
+    `Total: ${fmt(doc.total)}`,
+    ...(doc.status !== "paid" && doc.balance > 0 ? [`Amount paid: ${fmt(doc.amountPaid)}`, `Balance due: ${fmt(doc.balance)}`] : []),
+    `Status: ${doc.status.toUpperCase()}`,
+  ];
+  const wdoc = new Document({
+    sections: [{
+      children: [
+        new Paragraph({ text: doc.business.business_name || "Receipt", heading: HeadingLevel.HEADING_1 }),
+        new Paragraph({ text: `${doc.docType === "invoice" ? "Invoice" : "Receipt"} No: ${doc.docNo}  ·  Date: ${doc.docDate.toLocaleDateString()}` }),
+        new Paragraph({ text: `Customer: ${doc.customer || "Walk-in"}` }),
+        new Paragraph({ text: "" }),
+        table,
+        new Paragraph({ text: "" }),
+        ...summaryLines.map((l) => new Paragraph({ text: l })),
+      ],
+    }],
+  });
+  const blob = await Packer.toBlob(wdoc);
+  downloadBlob(blob, `${doc.docNo || "receipt"}.docx`);
+}
+
+document.getElementById("download-pdf-btn").addEventListener("click", () => downloadReceiptPDF(currentBuilderDocData()));
+document.getElementById("download-excel-btn").addEventListener("click", () => downloadReceiptExcel(currentBuilderDocData()));
+document.getElementById("download-word-btn").addEventListener("click", () => downloadReceiptWord(currentBuilderDocData()));
+
 // ---------- Share (WhatsApp, Email, Bluetooth, Nearby Share, etc.) ----------
 // A website can't push a file straight into WhatsApp/Bluetooth/Email itself —
 // only the operating system's own Share sheet can do that. These helpers hand
