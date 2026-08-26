@@ -73,6 +73,7 @@ document.getElementById("signup-form").addEventListener("submit", async (e) => {
   const phone = document.getElementById("su-phone").value.trim();
   const address = document.getElementById("su-address").value.trim();
   const bank_name = document.getElementById("su-bank-name").value.trim();
+const account_number = document.getElementById("su-account-number").value.trim();
   const account_number = document.getElementById("su-account-number").value.trim();
   const logoFile = document.getElementById("su-logo").files[0];
 
@@ -156,6 +157,8 @@ function populateBizUI() {
   document.getElementById("settings-phone").value = p.phone || "";
   document.getElementById("settings-address").value = p.address || "";
   document.getElementById("settings-email").value = p.email || "";
+document.getElementById("settings-bank-name").value = p.bank_name || "";
+document.getElementById("settings-account-number").value = p.account_number || "";
   document.getElementById("settings-bank-name").value = p.bank_name || "";
   document.getElementById("settings-account-number").value = p.account_number || "";
   document.getElementById("settings-tax").value = p.tax_rate || 0;
@@ -401,6 +404,12 @@ function renderPreview() {
     : "";
   const signatureHtml = includeSignature
     ? `<div class="rc-sign-box">
+const bankHtml = (p.bank_name || p.account_number)
+  ? `<div class="rc-bank-box">
+       ${p.bank_name ? `<div class="rc-biz-meta"><b>Bank:</b> ${escapeHtml(p.bank_name)}</div>` : ""}
+       ${p.account_number ? `<div class="rc-biz-meta"><b>Account No:</b> ${escapeHtml(p.account_number)}</div>` : ""}
+     </div>`
+  : "";
          <div class="box"><span>Signature</span></div>
          <div class="box"><span>Stamp</span></div>
        </div>`
@@ -1327,6 +1336,8 @@ document.getElementById("settings-form").addEventListener("submit", async (e) =>
     business_name: document.getElementById("settings-business").value.trim(),
     phone: document.getElementById("settings-phone").value.trim(),
     address: document.getElementById("settings-address").value.trim(),
+bank_name: document.getElementById("settings-bank-name").value.trim(),
+account_number: document.getElementById("settings-account-number").value.trim(),
     bank_name: document.getElementById("settings-bank-name").value.trim(),
     account_number: document.getElementById("settings-account-number").value.trim(),
     tax_rate: Number(document.getElementById("settings-tax").value || 0),
