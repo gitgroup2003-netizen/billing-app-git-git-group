@@ -72,21 +72,18 @@ document.getElementById("signup-form").addEventListener("submit", async (e) => {
   const business_name = document.getElementById("su-business").value.trim();
   const phone = document.getElementById("su-phone").value.trim();
   const address = document.getElementById("su-address").value.trim();
-  const bank_name = document.getElementById("su-bank-name").value.trim();
-const account_number = document.getElementById("su-account-number").value.trim();
-  const account_number = document.getElementById("su-account-number").value.trim();
   const logoFile = document.getElementById("su-logo").files[0];
 
   const btn = e.target.querySelector("button[type=submit]");
   btn.disabled = true; btn.textContent = "Creating account…";
 
-  // business_name / phone / address / bank_name / account_number travel as
-  // user metadata so the database trigger (handle_new_user) can create the
-  // profile row — this works even when email confirmation is required and
-  // no session exists yet on the client.
+  // business_name / phone / address travel as user metadata so the
+  // database trigger (handle_new_user) can create the profile row —
+  // this works even when email confirmation is required and no
+  // session exists yet on the client.
   const { data, error } = await sb.auth.signUp({
     email, password,
-    options: { data: { business_name, phone, address, bank_name, account_number } },
+    options: { data: { business_name, phone, address } },
   });
   if (error) { btn.disabled = false; btn.textContent = "Create account"; return showAuthError(error.message); }
 
@@ -157,10 +154,6 @@ function populateBizUI() {
   document.getElementById("settings-phone").value = p.phone || "";
   document.getElementById("settings-address").value = p.address || "";
   document.getElementById("settings-email").value = p.email || "";
-document.getElementById("settings-bank-name").value = p.bank_name || "";
-document.getElementById("settings-account-number").value = p.account_number || "";
-  document.getElementById("settings-bank-name").value = p.bank_name || "";
-  document.getElementById("settings-account-number").value = p.account_number || "";
   document.getElementById("settings-tax").value = p.tax_rate || 0;
   const logoImg = document.getElementById("settings-logo-preview");
   if (p.logo_url) logoImg.src = p.logo_url; else logoImg.removeAttribute("src");
@@ -404,22 +397,8 @@ function renderPreview() {
     : "";
   const signatureHtml = includeSignature
     ? `<div class="rc-sign-box">
-const bankHtml = (p.bank_name || p.account_number)
-  ? `<div class="rc-bank-box">
-       ${p.bank_name ? `<div class="rc-biz-meta"><b>Bank:</b> ${escapeHtml(p.bank_name)}</div>` : ""}
-       ${p.account_number ? `<div class="rc-biz-meta"><b>Account No:</b> ${escapeHtml(p.account_number)}</div>` : ""}
-     </div>`
-  : "";
          <div class="box"><span>Signature</span></div>
          <div class="box"><span>Stamp</span></div>
-       </div>`
-    : "";
-  // Bank payment details (set on signup or in Settings) — printed on every
-  // template so customers know where to send payment.
-  const bankHtml = (p.bank_name || p.account_number)
-    ? `<div class="rc-bank-box">
-         ${p.bank_name ? `<div class="rc-biz-meta"><b>Bank:</b> ${escapeHtml(p.bank_name)}</div>` : ""}
-         ${p.account_number ? `<div class="rc-biz-meta"><b>Account No:</b> ${escapeHtml(p.account_number)}</div>` : ""}
        </div>`
     : "";
 
@@ -449,7 +428,6 @@ const bankHtml = (p.bank_name || p.account_number)
       <div class="rc-row rc-total-row"><span>TOTAL</span><span>${fmt(total)}</span></div>
       ${balanceHtml}
       <div class="rc-center"><span class="rc-badge">${status}</span></div>
-      ${bankHtml}
       ${signatureHtml}
       <div class="rc-thanks">Thank you for your business</div>
     `;
@@ -481,7 +459,6 @@ const bankHtml = (p.bank_name || p.account_number)
       <div class="totals-row grand"><span>Total</span><span>${fmt(total)}</span></div>
       ${showBalance ? `<div class="totals-row rc-paid-row"><span>Amount paid</span><span>${fmt(amountPaid)}</span></div>
         <div class="totals-row rc-balance-row"><span>Balance due</span><span>${fmt(balance)}</span></div>` : ""}
-      ${bankHtml}
       ${signatureHtml}
       <div class="rc-thanks">We deliver for a fee — Thank you!</div>
     `;
@@ -508,7 +485,6 @@ const bankHtml = (p.bank_name || p.account_number)
       <div class="rc-center" style="margin-top:.6em">
         <span class="rc-badge">${status}</span>
       </div>
-      ${bankHtml}
       ${signatureHtml}
       <div class="rc-thanks">Signature: ______________</div>
     `;
@@ -532,7 +508,6 @@ const bankHtml = (p.bank_name || p.account_number)
         ${showBalance ? `<div style="font-size:.7rem;margin-top:.3em;color:#B23A2E;font-weight:700">Balance due: ${fmt(balance)}</div>` : ""}
         <div style="font-size:.65rem;margin-top:.3em"><span class="rc-badge" style="border-color:#2F6F4E;color:#1F4A34">${status}</span></div>
       </div>
-      ${bankHtml}
       <div class="rc-slip-stamp">
         <div>Depositor sign</div>
         <div>Teller / Stamp</div>
@@ -561,7 +536,6 @@ const bankHtml = (p.bank_name || p.account_number)
         <span>${items.length} entr${items.length === 1 ? "y" : "ies"}</span>
         <span><span class="rc-badge">${status}</span></span>
       </div>
-      ${bankHtml}
       ${signatureHtml}
       <div class="rc-thanks">This statement is system-generated</div>
     `;
@@ -1336,10 +1310,6 @@ document.getElementById("settings-form").addEventListener("submit", async (e) =>
     business_name: document.getElementById("settings-business").value.trim(),
     phone: document.getElementById("settings-phone").value.trim(),
     address: document.getElementById("settings-address").value.trim(),
-bank_name: document.getElementById("settings-bank-name").value.trim(),
-account_number: document.getElementById("settings-account-number").value.trim(),
-    bank_name: document.getElementById("settings-bank-name").value.trim(),
-    account_number: document.getElementById("settings-account-number").value.trim(),
     tax_rate: Number(document.getElementById("settings-tax").value || 0),
   };
   const { error } = await sb.from("profiles").update(payload).eq("id", state.user.id);
