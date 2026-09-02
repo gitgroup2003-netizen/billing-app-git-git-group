@@ -47,11 +47,6 @@ button{font-family:inherit;}
 .btn-amber{ background:var(--amber); color:var(--ink); }
 .btn-amber:hover{ background:var(--amber-2); }
 .btn-outline{ background:transparent; border-color:var(--line); color:var(--ink); }
-
-/* Buttons inside the dark receipt-preview stage need light text —
-   they'd otherwise render as dark navy text on a dark navy background. */
-.receipt-stage .receipt-actions .btn-outline{ color:#fff !important; border-color:#E3B45C !important; background:rgba(255,255,255,.06) !important; }
-.receipt-stage .receipt-actions .btn-outline:hover{ border-color:#fff !important; background:rgba(255,255,255,.14) !important; }
 .btn-outline:hover{ border-color:var(--ink); }
 .btn-ghost{ background:transparent; color:var(--slate); padding:.5em .8em; }
 .btn-ghost:hover{ color:var(--ink); }
@@ -139,6 +134,19 @@ label{ font-size:.8rem; color:var(--slate); font-weight:600; display:block; marg
 .stat-card .value.amber{ color:var(--amber); }
 .stat-card .value.green{ color:var(--green); }
 
+/* ---------- Budgets ---------- */
+.budget-item{ padding:.8rem 0; border-bottom:1px solid var(--line); }
+.budget-item:last-child{ border-bottom:none; }
+.budget-item .budget-top{ display:flex; justify-content:space-between; align-items:baseline; gap:.6rem; margin-bottom:.4rem; }
+.budget-item .budget-cat{ font-weight:700; }
+.budget-item .budget-nums{ font-size:.82rem; color:var(--slate); }
+.budget-item .budget-nums .over{ color:var(--red); font-weight:700; }
+.budget-track{ background:#EFEAE0; border-radius:99px; height:9px; overflow:hidden; }
+.budget-fill{ height:100%; border-radius:99px; background:var(--green); transition:width .3s ease; }
+.budget-fill.warn{ background:var(--amber); }
+.budget-fill.over{ background:var(--red); }
+.budget-item .budget-actions{ margin-top:.4rem; }
+
 /* ---------- Tables ---------- */
 table{ width:100%; border-collapse:collapse; }
 .data-table{ background:#fff; border:1px solid var(--line); border-radius:var(--radius); overflow:hidden; }
@@ -174,8 +182,7 @@ table{ width:100%; border-collapse:collapse; }
   padding-bottom: 1.4rem;
 }
 .rc-center{ text-align:center; }
-.rc-logo{ max-width:110px; max-height:100px; object-fit:contain; margin:0 auto .5rem; display:block; }
-.rc-logo-inline{ max-width:84px; max-height:84px; object-fit:contain; display:block; }
+.rc-logo{ width:65%; max-width:220px; max-height:220px; object-fit:contain; margin:0 auto .6rem; display:block; }
 .rc-biz-name{ font-family:'Fraunces',serif; font-weight:700; font-size:1.05rem; letter-spacing:.02em; }
 .rc-biz-meta{ font-size:.68rem; color:#444; }
 .rc-divider{ border-top:1px dashed #999; margin:.7em 0; }

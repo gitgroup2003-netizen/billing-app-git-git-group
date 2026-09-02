@@ -18,6 +18,7 @@ let state = {
   profile: null,
   receipts: [],
   transactions: [],
+  budgets: [],
   currentItems: [],
   template: "marshalls",
   docType: "receipt",
@@ -143,6 +144,7 @@ async function afterAuth() {
   populateBizUI();
   await loadReceipts();
   await loadTransactions();
+  await loadBudgets();
   goView("dashboard");
 }
 
@@ -198,6 +200,16 @@ async function loadTransactions() {
   state.transactions = data || [];
 }
 
+async function loadBudgets() {
+  const { data, error } = await sb
+    .from("budgets")
+    .select("*")
+    .eq("user_id", state.user.id)
+    .order("category", { ascending: true });
+  if (error) { toast("Could not load budgets"); return; }
+  state.budgets = data || [];
+}
+
 // ---------- Dashboard ----------
 function renderDashboard() {
   const r = state.receipts;
@@ -244,12 +256,10 @@ function receiptRow(x, compact) {
     <td><span class="pill ${pillClass}">${x.status}</span></td>
     ${compact ? "" : `<td class="row-actions">
         <button class="btn btn-ghost btn-sm" data-view="${x.id}">View</button>
-        <button class="btn btn-ghost btn-sm" data-pdf="${x.id}">PDF</button>
         <button class="btn btn-danger btn-sm" data-del="${x.id}">Delete</button>
       </td>`}
   `;
   tr.querySelector("[data-view]")?.addEventListener("click", () => openReceiptForPrint(x));
-  tr.querySelector("[data-pdf]")?.addEventListener("click", (e) => { e.stopPropagation(); downloadReceiptPDF(receiptToDocData(x)); });
   tr.querySelector("[data-del]")?.addEventListener("click", () => deleteReceipt(x.id));
   if (compact) tr.addEventListener("click", () => openReceiptForPrint(x));
   return tr;
@@ -406,7 +416,7 @@ function renderPreview() {
   if (state.template === "marshalls") {
     html = `
       <div class="rc-center">
-        ${p.logo_url ? `<img src="${p.logo_url}" class="rc-logo" crossorigin="anonymous"/>` : ""}
+        ${p.logo_url ? `<img src="${p.logo_url}" class="rc-logo"/>` : ""}
         <div class="rc-biz-name">${escapeHtml(short(p.business_name, 26))}</div>
         <div class="rc-biz-meta">${escapeHtml(short(p.address, 40))}</div>
         <div class="rc-biz-meta">${escapeHtml(p.phone || "")}</div>
@@ -433,9 +443,9 @@ function renderPreview() {
     `;
   } else if (state.template === "culinary") {
     html = `
+      ${p.logo_url ? `<div class="rc-center"><img src="${p.logo_url}" class="rc-logo"/></div>` : ""}
       <div class="rc-row" style="align-items:flex-start">
         <div>
-          ${p.logo_url ? `<img src="${p.logo_url}" class="rc-logo-inline" crossorigin="anonymous"/>` : ""}
           <div class="rc-biz-name">${escapeHtml(short(p.business_name, 26))}</div>
           <div class="rc-biz-meta">${escapeHtml(p.phone || "")}</div>
           <div class="rc-biz-meta">${escapeHtml(p.email || "")}</div>
@@ -465,6 +475,7 @@ function renderPreview() {
   } else if (state.template === "brentford") {
     html = `
       <div class="rc-center">
+        ${p.logo_url ? `<img src="${p.logo_url}" class="rc-logo"/>` : ""}
         <div class="rc-biz-name">${escapeHtml(short(p.business_name, 24))}</div>
         <div class="rc-biz-meta">${escapeHtml(short(p.address, 40))}</div>
         <div class="rc-biz-meta">Tel: ${escapeHtml(p.phone || "")}</div>
@@ -521,6 +532,7 @@ function renderPreview() {
       return `<tr><td>${escapeHtml(short(i.description, 24))}</td><td>${i.qty}</td><td>${fmt(i.unit_price)}</td><td>${fmt(amt)}</td><td>${fmt(running)}</td></tr>`;
     }).join("");
     html = `
+      ${p.logo_url ? `<div class="rc-center"><img src="${p.logo_url}" class="rc-logo"/></div>` : ""}
       <div class="rc-stmt-head">
         <div class="biz">${escapeHtml(short(p.business_name, 28))}</div>
         <div class="meta">${escapeHtml(short(p.address, 44))} · ${escapeHtml(p.phone || "")}</div>
@@ -624,15 +636,6 @@ state.paperSize = "auto";
 document.body.classList.add("paper-auto");
 applyPageSizeStyle("auto");
 
-// Force-fix: guarantee the outline buttons inside the dark receipt
-// preview are readable regardless of CSS cache state, by setting their
-// colors directly via JS the moment the page loads.
-document.querySelectorAll(".receipt-stage .receipt-actions .btn-outline").forEach((btn) => {
-  btn.style.color = "#fff";
-  btn.style.borderColor = "#E3B45C";
-  btn.style.background = "rgba(255,255,255,.06)";
-});
-
 function openReceiptForPrint(x) {
   goView("new");
   state.docType = x.doc_type;
@@ -655,275 +658,19 @@ function openReceiptForPrint(x) {
 }
 
 // ---------- Share as image (mobile-friendly alt to print) ----------
-// ---------- Single-document downloads: PDF / Excel / Word ----------
-// Works from two sources: a saved record straight from the Records list
-// (receiptToDocData), or whatever's currently in the builder, saved or not
-// (currentBuilderDocData) — same shape either way, same export functions.
-function receiptToDocData(x) {
-  const balance = Math.max(0, Number(x.total || 0) - Number(x.amount_paid || 0));
-  return {
-    business: state.profile || {},
-    docNo: x.doc_number,
-    docDate: x.doc_date ? new Date(x.doc_date + "T00:00:00") : new Date(x.created_at),
-    docType: x.doc_type,
-    customer: x.customer_name,
-    phone: x.customer_phone,
-    items: x.items || [],
-    subtotal: x.subtotal, taxRate: x.tax_rate, taxAmount: x.tax_amount, total: x.total,
-    amountPaid: x.amount_paid, balance, status: x.status,
-    paymentMethod: x.payment_method, notes: x.notes,
-  };
-}
-
-function currentBuilderDocData() {
-  const items = state.currentItems.filter((i) => i.description || i.qty || i.unit_price);
-  const { subtotal, taxRate, taxAmount, total } = computeTotals();
-  const status = document.getElementById("b-status").value;
-  const amountPaidRaw = document.getElementById("b-amount-paid").value;
-  const amountPaid = amountPaidRaw === "" ? (status === "paid" ? total : 0) : Number(amountPaidRaw);
-  const docDateVal = document.getElementById("b-doc-date").value;
-  return {
-    business: state.profile || {},
-    docNo: document.getElementById("b-doc-number").value || nextDocNumber(),
-    docDate: docDateVal ? new Date(docDateVal + "T00:00:00") : new Date(),
-    docType: state.docType,
-    customer: document.getElementById("b-customer-name").value,
-    phone: document.getElementById("b-customer-phone").value,
-    items,
-    subtotal, taxRate, taxAmount, total,
-    amountPaid, balance: Math.max(0, total - amountPaid), status,
-    paymentMethod: document.getElementById("b-payment-method").value,
-    notes: document.getElementById("b-notes").value,
-  };
-}
-
-// Fetches the business logo and prepares it for embedding into a
-// downloaded PDF or Word file. Returns null (never throws) if there's
-// no logo set, or if the fetch fails for any reason — exports still
-// work fine without a logo, they just skip it.
-async function loadLogoForExport(profile) {
-  if (!profile || !profile.logo_url) return null;
-  try {
-    const res = await fetch(profile.logo_url, { mode: "cors" });
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const blob = await res.blob();
-    const dataUrl = await new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onload = () => resolve(reader.result);
-      reader.onerror = reject;
-      reader.readAsDataURL(blob);
-    });
-    const { w, h } = await new Promise((resolve) => {
-      const img = new Image();
-      img.onload = () => resolve({ w: img.naturalWidth || 1, h: img.naturalHeight || 1 });
-      img.onerror = () => resolve({ w: 1, h: 1 });
-      img.src = dataUrl;
-    });
-    const format = blob.type.includes("png") ? "PNG" : "JPEG";
-    return { dataUrl, w, h, format, arrayBuffer: await blob.arrayBuffer() };
-  } catch (e) {
-    console.error("Logo export failed:", e);
-    toast(`Logo couldn't be embedded (${e.message || "load error"}) — file downloaded without it.`);
-    return null;
-  }
-}
-
-async function downloadReceiptPDF(doc) {
-  if (!doc.items.length) return toast("No items to export");
-  const { jsPDF } = window.jspdf;
-  const pdf = new jsPDF();
-  const logo = await loadLogoForExport(doc.business);
-
-  // Logo sits top-left as a fixed-height box (max 22mm tall), text header
-  // shifts right to make room for it when a logo is present.
-  const textX = logo ? 40 : 14;
-  if (logo) {
-    const maxH = 22, maxW = 22;
-    const scale = Math.min(maxW / logo.w, maxH / logo.h);
-    pdf.addImage(logo.dataUrl, logo.format, 14, 10, logo.w * scale, logo.h * scale);
-  }
-  pdf.setFontSize(15);
-  pdf.text(doc.business.business_name || "Receipt", textX, 18);
-  pdf.setFontSize(9);
-  pdf.text(`${doc.business.address || ""}   ${doc.business.phone || ""}`, textX, 24);
-  pdf.setFontSize(11);
-  pdf.text(`${doc.docType === "invoice" ? "Invoice" : "Receipt"} No: ${doc.docNo}`, 14, 38);
-  pdf.text(`Date: ${doc.docDate.toLocaleDateString()}`, 14, 44);
-  pdf.text(`Customer: ${doc.customer || "Walk-in"}`, 14, 50);
-  pdf.autoTable({
-    startY: 58,
-    head: [["Item", "Qty", "Unit price", "Total"]],
-    body: doc.items.map((i) => [i.description, i.qty, fmt(i.unit_price), fmt(i.qty * i.unit_price)]),
-    styles: { fontSize: 9 },
-    headStyles: { fillColor: [18, 33, 61] },
-  });
-  let y = pdf.lastAutoTable.finalY + 8;
-  pdf.setFontSize(10);
-  pdf.text(`Subtotal: ${fmt(doc.subtotal)}`, 140, y); y += 6;
-  if (doc.taxRate) { pdf.text(`Tax (${doc.taxRate}%): ${fmt(doc.taxAmount)}`, 140, y); y += 6; }
-  pdf.setFontSize(12);
-  pdf.text(`Total: ${fmt(doc.total)}`, 140, y); y += 7;
-  if (doc.status !== "paid" && doc.balance > 0) {
-    pdf.setFontSize(10);
-    pdf.text(`Amount paid: ${fmt(doc.amountPaid)}`, 140, y); y += 6;
-    pdf.setFontSize(11);
-    pdf.text(`Balance due: ${fmt(doc.balance)}`, 140, y); y += 7;
-  }
-  pdf.setFontSize(9);
-  pdf.text(`Status: ${doc.status.toUpperCase()}   Payment: ${doc.paymentMethod || ""}`, 14, y + 4);
-  pdf.save(`${doc.docNo || "receipt"}.pdf`);
-}
-
-function downloadReceiptExcel(doc) {
-  if (!doc.items.length) return toast("No items to export");
-  const rows = doc.items.map((i) => ({
-    Description: i.description, Qty: i.qty, "Unit price": i.unit_price, Total: i.qty * i.unit_price,
-  }));
-  rows.push({});
-  rows.push({ Description: "Subtotal", Total: doc.subtotal });
-  if (doc.taxRate) rows.push({ Description: `Tax (${doc.taxRate}%)`, Total: doc.taxAmount });
-  rows.push({ Description: "TOTAL", Total: doc.total });
-  if (doc.status !== "paid" && doc.balance > 0) {
-    rows.push({ Description: "Amount paid", Total: doc.amountPaid });
-    rows.push({ Description: "Balance due", Total: doc.balance });
-  }
-  const ws = XLSX.utils.json_to_sheet(rows);
-  const wb = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb, ws, doc.docNo || "Receipt");
-  XLSX.writeFile(wb, `${doc.docNo || "receipt"}.xlsx`);
-}
-
-async function downloadReceiptWord(doc) {
-  if (!doc.items.length) return toast("No items to export");
-  const { Document, Packer, Paragraph, Table, TableRow, TableCell, TextRun, HeadingLevel, ImageRun } = window.docx;
-  const logo = await loadLogoForExport(doc.business);
-  const headerCells = ["Item", "Qty", "Unit price", "Total"];
-  const table = new Table({
-    rows: [
-      new TableRow({ children: headerCells.map((h) => new TableCell({ children: [new Paragraph({ children: [new TextRun({ text: h, bold: true })] })] })) }),
-      ...doc.items.map((i) => new TableRow({
-        children: [i.description, String(i.qty), fmt(i.unit_price), fmt(i.qty * i.unit_price)].map(
-          (v) => new TableCell({ children: [new Paragraph(String(v))] })
-        ),
-      })),
-    ],
-  });
-  const summaryLines = [
-    `Subtotal: ${fmt(doc.subtotal)}`,
-    ...(doc.taxRate ? [`Tax (${doc.taxRate}%): ${fmt(doc.taxAmount)}`] : []),
-    `Total: ${fmt(doc.total)}`,
-    ...(doc.status !== "paid" && doc.balance > 0 ? [`Amount paid: ${fmt(doc.amountPaid)}`, `Balance due: ${fmt(doc.balance)}`] : []),
-    `Status: ${doc.status.toUpperCase()}`,
-  ];
-  const logoParagraph = logo
-    ? new Paragraph({
-        children: [new ImageRun({
-          data: logo.arrayBuffer,
-          transformation: { width: 90, height: Math.round(90 * (logo.h / logo.w)) },
-        })],
-      })
-    : null;
-  const wdoc = new Document({
-    sections: [{
-      children: [
-        ...(logoParagraph ? [logoParagraph] : []),
-        new Paragraph({ text: doc.business.business_name || "Receipt", heading: HeadingLevel.HEADING_1 }),
-        new Paragraph({ text: `${doc.docType === "invoice" ? "Invoice" : "Receipt"} No: ${doc.docNo}  ·  Date: ${doc.docDate.toLocaleDateString()}` }),
-        new Paragraph({ text: `Customer: ${doc.customer || "Walk-in"}` }),
-        new Paragraph({ text: "" }),
-        table,
-        new Paragraph({ text: "" }),
-        ...summaryLines.map((l) => new Paragraph({ text: l })),
-      ],
-    }],
-  });
-  const blob = await Packer.toBlob(wdoc);
-  downloadBlob(blob, `${doc.docNo || "receipt"}.docx`);
-}
-
-document.getElementById("download-pdf-btn").addEventListener("click", () => downloadReceiptPDF(currentBuilderDocData()));
-document.getElementById("download-excel-btn").addEventListener("click", () => downloadReceiptExcel(currentBuilderDocData()));
-document.getElementById("download-word-btn").addEventListener("click", () => downloadReceiptWord(currentBuilderDocData()));
-
-// ---------- Share (WhatsApp, Email, Bluetooth, Nearby Share, etc.) ----------
-// A website can't push a file straight into WhatsApp/Bluetooth/Email itself —
-// only the operating system's own Share sheet can do that. These helpers hand
-// the receipt image to that native sheet wherever it's supported (most modern
-// mobile and desktop browsers), and fall back to a sensible manual flow
-// (download + pre-filled chat/email) wherever it isn't.
-async function getReceiptImageBlob() {
-  const node = document.getElementById("receipt-print-area");
-  const canvas = await html2canvas(node, { scale: 3, backgroundColor: "#ffffff", useCORS: true });
-  return new Promise((resolve) => canvas.toBlob(resolve, "image/png"));
-}
-
-function receiptShareSummary() {
-  const p = state.profile || {};
-  const docNo = document.getElementById("b-doc-number").value || "";
-  const { total } = computeTotals();
-  const customer = document.getElementById("b-customer-name").value;
-  return `${p.business_name || "Receipt"} — ${docNo}${customer ? ` for ${customer}` : ""} — Total ${fmt(total)}`;
-}
-
-function downloadBlob(blob, filename) {
-  const a = document.createElement("a");
-  a.href = URL.createObjectURL(blob);
-  a.download = filename;
-  a.click();
-}
-
 document.getElementById("share-btn").addEventListener("click", async () => {
-  const blob = await getReceiptImageBlob();
-  const file = new File([blob], "receipt.png", { type: "image/png" });
-  if (navigator.share && navigator.canShare && navigator.canShare({ files: [file] })) {
-    try {
-      await navigator.share({ files: [file], title: "Receipt", text: receiptShareSummary() });
-      return;
-    } catch (e) { /* user cancelled — fall through to manual save */ }
-  }
-  downloadBlob(blob, "receipt.png");
-  toast("Your device doesn't support direct sharing — image saved, attach it manually.");
-});
-
-document.getElementById("whatsapp-btn").addEventListener("click", async () => {
-  const blob = await getReceiptImageBlob();
-  const file = new File([blob], "receipt.png", { type: "image/png" });
-  const text = receiptShareSummary();
-  // Best path: native share sheet with WhatsApp pre-listed as a target and
-  // the image already attached — this is how it works on phones.
-  if (navigator.share && navigator.canShare && navigator.canShare({ files: [file] })) {
-    try {
-      await navigator.share({ files: [file], title: "Receipt", text });
-      return;
-    } catch (e) { return; }
-  }
-  // Desktop / unsupported fallback: open a WhatsApp chat with the summary
-  // pre-filled, and save the image so it can be attached in that chat.
-  downloadBlob(blob, "receipt.png");
-  window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, "_blank");
-  toast("Receipt image saved — attach it in the WhatsApp chat that just opened.");
-});
-
-document.getElementById("email-btn").addEventListener("click", async () => {
-  const blob = await getReceiptImageBlob();
-  const file = new File([blob], "receipt.png", { type: "image/png" });
-  const p = state.profile || {};
-  const docNo = document.getElementById("b-doc-number").value || "";
-  const subject = `${p.business_name || "Receipt"} — ${docNo}`;
-  const body = receiptShareSummary();
-  // Native share sheet: most phone mail apps (Gmail, Outlook, Mail) accept
-  // a shared file directly and open a real draft with it attached.
-  if (navigator.share && navigator.canShare && navigator.canShare({ files: [file] })) {
-    try {
-      await navigator.share({ files: [file], title: subject, text: body });
-      return;
-    } catch (e) { return; }
-  }
-  // Desktop fallback: mailto can't carry an attachment, so open a
-  // pre-filled draft and save the image for the user to attach.
-  downloadBlob(blob, "receipt.png");
-  window.location.href = `mailto:?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
-  toast("Receipt image saved — attach it to the email draft that just opened.");
+  const node = document.getElementById("receipt-print-area");
+  const canvas = await html2canvas(node, { scale: 3, backgroundColor: "#ffffff" });
+  canvas.toBlob(async (blob) => {
+    const file = new File([blob], "receipt.png", { type: "image/png" });
+    if (navigator.share && navigator.canShare && navigator.canShare({ files: [file] })) {
+      try { await navigator.share({ files: [file], title: "Receipt" }); return; } catch (e) {}
+    }
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = "receipt.png";
+    a.click();
+  }, "image/png");
 });
 
 // ---------- Personal Finance Tracker (sub-app) ----------
@@ -949,7 +696,21 @@ document.getElementById("finance-form").addEventListener("submit", async (e) => 
   state.transactions.unshift(data);
   document.getElementById("fin-amount").value = "";
   document.getElementById("fin-note").value = "";
-  toast("Added");
+  if (data.kind === "expense") {
+    const b = state.budgets.find((x) => x.category === data.category);
+    if (b) {
+      const spent = spentThisMonth(data.category);
+      if (spent > Number(b.monthly_limit)) {
+        toast(`Over budget: ${data.category} is ${fmt(spent - b.monthly_limit)} over its monthly limit`);
+      } else {
+        toast("Added");
+      }
+    } else {
+      toast("Added");
+    }
+  } else {
+    toast("Added");
+  }
   renderFinance();
 });
 
@@ -960,6 +721,75 @@ async function deleteTransaction(id) {
   state.transactions = state.transactions.filter((t) => t.id !== id);
   renderFinance();
   toast("Deleted");
+}
+
+// ---------- Budgets ----------
+document.getElementById("budget-form").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const category = document.getElementById("budget-category").value;
+  const monthly_limit = Number(document.getElementById("budget-amount").value || 0);
+  if (!monthly_limit) return toast("Enter a budget amount");
+  const btn = e.target.querySelector("button[type=submit]");
+  btn.disabled = true; btn.textContent = "Saving…";
+  const { data, error } = await sb
+    .from("budgets")
+    .upsert({ user_id: state.user.id, category, monthly_limit }, { onConflict: "user_id,category" })
+    .select()
+    .single();
+  btn.disabled = false; btn.textContent = "Set budget";
+  if (error) return toast("Could not save budget: " + error.message);
+  const idx = state.budgets.findIndex((b) => b.category === category);
+  if (idx >= 0) state.budgets[idx] = data; else state.budgets.push(data);
+  document.getElementById("budget-amount").value = "";
+  toast("Budget saved");
+  renderFinance();
+});
+
+async function deleteBudget(id) {
+  if (!confirm("Remove this budget?")) return;
+  const { error } = await sb.from("budgets").delete().eq("id", id).eq("user_id", state.user.id);
+  if (error) return toast("Delete failed");
+  state.budgets = state.budgets.filter((b) => b.id !== id);
+  renderFinance();
+  toast("Budget removed");
+}
+
+function spentThisMonth(category) {
+  const now = new Date();
+  const y = now.getFullYear(), m = now.getMonth();
+  return state.transactions
+    .filter((x) => x.kind === "expense" && x.category === category)
+    .filter((x) => { const d = new Date(x.occurred_on); return d.getFullYear() === y && d.getMonth() === m; })
+    .reduce((s, x) => s + Number(x.amount), 0);
+}
+
+function renderBudgets() {
+  const list = document.getElementById("budget-list");
+  if (!state.budgets.length) {
+    list.innerHTML = `<div class="mono" style="color:var(--slate);padding:.6em 0">No budgets set yet — pick a category above and set a monthly limit.</div>`;
+    return;
+  }
+  list.innerHTML = "";
+  state.budgets.forEach((b) => {
+    const spent = spentThisMonth(b.category);
+    const limit = Number(b.monthly_limit) || 0;
+    const pct = limit ? Math.min(100, (spent / limit) * 100) : 0;
+    const remaining = limit - spent;
+    const over = spent > limit;
+    const fillClass = over ? "over" : pct >= 80 ? "warn" : "";
+    const row = document.createElement("div");
+    row.className = "budget-item";
+    row.innerHTML = `
+      <div class="budget-top">
+        <div class="budget-cat">${escapeHtml(b.category)}</div>
+        <div class="budget-nums">${fmt(spent)} of ${fmt(limit)}${over ? ` — <span class="over">over by ${fmt(spent - limit)}</span>` : ` — ${fmt(remaining)} left`}</div>
+      </div>
+      <div class="budget-track"><div class="budget-fill ${fillClass}" style="width:${pct}%"></div></div>
+      <div class="budget-actions"><button class="btn btn-danger btn-sm" data-bdel="${b.id}">Remove</button></div>
+    `;
+    row.querySelector("[data-bdel]").addEventListener("click", () => deleteBudget(b.id));
+    list.appendChild(row);
+  });
 }
 
 let financeChart;
@@ -1011,6 +841,7 @@ function renderFinance() {
   });
 
   if (typeof renderMonthlyReport === "function") renderMonthlyReport();
+  renderBudgets();
 }
 
 document.getElementById("finance-export-btn").addEventListener("click", () => {

@@ -264,16 +264,7 @@
             <div class="receipt-actions">
               <button class="btn btn-amber btn-sm" id="save-receipt-btn">Save &amp; Print</button>
               <button class="btn btn-outline btn-sm" id="print-btn">Print only</button>
-            </div>
-            <div class="receipt-actions" style="padding-top:0">
-              <button class="btn btn-outline btn-sm" id="share-btn">Share…</button>
-              <button class="btn btn-outline btn-sm" id="whatsapp-btn">WhatsApp</button>
-              <button class="btn btn-outline btn-sm" id="email-btn">Email</button>
-            </div>
-            <div class="receipt-actions" style="padding-top:0">
-              <button class="btn btn-outline btn-sm" id="download-pdf-btn">Download PDF</button>
-              <button class="btn btn-outline btn-sm" id="download-excel-btn">Download Excel</button>
-              <button class="btn btn-outline btn-sm" id="download-word-btn">Download Word</button>
+              <button class="btn btn-outline btn-sm" id="share-btn">Share / Save image</button>
             </div>
           </div>
           <div class="card" style="margin-top:1rem">
@@ -325,7 +316,34 @@
       <div class="card" style="margin-bottom:1.4rem">
         <div class="topbar" style="margin-bottom:1rem">
           <div>
-            <label style="margin-bottom:.2rem">Monthly report</label>
+            <label style="margin-bottom:.2rem">Budgets</label>
+            <div class="sub" style="margin-top:0">Set a monthly limit per category, then track spend against it</div>
+          </div>
+        </div>
+        <form id="budget-form" style="display:flex;gap:.6rem;flex-wrap:wrap;align-items:flex-end;margin-bottom:1.1rem">
+          <div class="field" style="margin-bottom:0;flex:1;min-width:150px">
+            <label>Category</label>
+            <select id="budget-category">
+              <option>General</option>
+              <option>Food</option>
+              <option>Transport</option>
+              <option>Rent</option>
+              <option>Utilities</option>
+              <option>Shopping</option>
+              <option>Health</option>
+              <option>Savings</option>
+              <option>Other</option>
+            </select>
+          </div>
+          <div class="field" style="margin-bottom:0;flex:1;min-width:130px">
+            <label>Monthly limit</label>
+            <input type="number" id="budget-amount" min="0" step="1" required />
+          </div>
+          <button class="btn btn-amber" type="submit">Set budget</button>
+        </form>
+        <div id="budget-list"></div>
+      </div>
+
             <div class="sub" style="margin-top:0">Pick a month for a full breakdown, printable and exportable</div>
           </div>
           <input type="month" id="report-month" style="max-width:170px" />
