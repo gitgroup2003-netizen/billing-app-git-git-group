@@ -207,6 +207,8 @@ table.rc-line-table td:first-child{ word-break:break-word; }
 .rc-sign-box .box{ flex:1; border:1px solid #999; border-radius:4px; height:52px; position:relative; }
 .rc-sign-box .box span{ position:absolute; bottom:3px; left:0; right:0; text-align:center; font-size:.6rem; color:#777; letter-spacing:.04em; text-transform:uppercase; }
 .receipt-actions{ display:flex; gap:.6rem; justify-content:center; padding:1.2rem 0; }
+.receipt-actions .btn-outline{ color:var(--paper); border-color:rgba(255,255,255,.35); }
+.receipt-actions .btn-outline:hover{ border-color:var(--paper); background:rgba(255,255,255,.06); }
 
 /* culinary / invoice-style template */
 .tpl-culinary #receipt-print-area{ width:420px; font-family:'Inter',sans-serif; font-size:.8rem; }

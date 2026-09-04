@@ -597,12 +597,11 @@ document.getElementById("save-receipt-btn").addEventListener("click", async () =
   const btn = document.getElementById("save-receipt-btn");
   btn.disabled = true; btn.textContent = "Saving…";
   const { data, error } = await sb.from("receipts").insert(payload).select().single();
-  btn.disabled = false; btn.textContent = "Save & Print";
+  btn.disabled = false; btn.textContent = "Save";
   if (error) return toast("Save failed: " + error.message);
 
   state.receipts.unshift(data);
   toast("Saved");
-  printCurrent();
 });
 
 // ---------- Print / share current preview ----------
@@ -687,36 +686,14 @@ function downloadFile(file) {
 
 document.getElementById("share-btn").addEventListener("click", async () => {
   const file = await receiptImageFile();
-  if (navigator.share && navigator.canShare && navigator.canShare({ files: [file] })) {
-    try { await navigator.share({ files: [file], title: "Receipt" }); return; } catch (e) {}
-  }
-  downloadFile(file);
-});
-
-document.getElementById("share-whatsapp-btn").addEventListener("click", async () => {
-  const file = await receiptImageFile();
+  // Opens the device's native share sheet — WhatsApp, Email, Messages, etc.
+  // all show up there automatically as options.
   if (navigator.share && navigator.canShare && navigator.canShare({ files: [file] })) {
     try { await navigator.share({ files: [file], title: "Receipt", text: "Here's your receipt" }); return; } catch (e) {}
   }
-  // Desktop fallback: browsers can't attach files to WhatsApp automatically —
-  // download the image, then open WhatsApp with a prefilled message.
+  // Desktop fallback (no native share sheet available): just download the image.
   downloadFile(file);
-  toast("Image downloaded — attach it in the WhatsApp chat that just opened");
-  window.open(`https://wa.me/?text=${encodeURIComponent("Here's your receipt (see attached image).")}`, "_blank");
-});
-
-document.getElementById("share-email-btn").addEventListener("click", async () => {
-  const file = await receiptImageFile();
-  if (navigator.share && navigator.canShare && navigator.canShare({ files: [file] })) {
-    try { await navigator.share({ files: [file], title: "Receipt", text: "Please find the receipt attached." }); return; } catch (e) {}
-  }
-  // Desktop fallback: browsers can't attach files to a mailto: link —
-  // download the image, then open the mail client so the user can attach it.
-  downloadFile(file);
-  toast("Image downloaded — attach it to the email that just opened");
-  const subject = encodeURIComponent("Receipt");
-  const body = encodeURIComponent("Please find the receipt attached.\n\n(The receipt image has been downloaded to your device — attach it to this email.)");
-  window.location.href = `mailto:?subject=${subject}&body=${body}`;
+  toast("Image downloaded — you can attach it to WhatsApp, email, or any app");
 });
 
 // ---------- Personal Finance Tracker (sub-app) ----------
