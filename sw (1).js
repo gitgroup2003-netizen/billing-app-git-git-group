@@ -1,4 +1,4 @@
-const CACHE = "receiptpro-v5";
+const CACHE = "receiptpro-v6";
 const ASSETS = [
   "./",
   "./index.html",

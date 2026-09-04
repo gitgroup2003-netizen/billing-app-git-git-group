@@ -19,6 +19,7 @@ let state = {
   receipts: [],
   transactions: [],
   budgets: [],
+  inventory: [],
   currentItems: [],
   template: "marshalls",
   docType: "receipt",
@@ -145,6 +146,7 @@ async function afterAuth() {
   await loadReceipts();
   await loadTransactions();
   await loadBudgets();
+  await loadInventory();
   goView("dashboard");
 }
 
@@ -174,6 +176,7 @@ function goView(name) {
   if (name === "dashboard") renderDashboard();
   if (name === "receipts") renderReceiptsTable();
   if (name === "finance") renderFinance();
+  if (name === "inventory") renderInventory();
   if (name === "analytics") renderAnalytics();
   if (name === "new") { resetBuilder(); }
   window.scrollTo(0, 0);
@@ -208,6 +211,16 @@ async function loadBudgets() {
     .order("category", { ascending: true });
   if (error) { toast("Could not load budgets"); return; }
   state.budgets = data || [];
+}
+
+async function loadInventory() {
+  const { data, error } = await sb
+    .from("inventory_items")
+    .select("*")
+    .eq("user_id", state.user.id)
+    .order("item_name", { ascending: true });
+  if (error) { toast("Could not load inventory"); return; }
+  state.inventory = data || [];
 }
 
 // ---------- Dashboard ----------
@@ -658,19 +671,52 @@ function openReceiptForPrint(x) {
 }
 
 // ---------- Share as image (mobile-friendly alt to print) ----------
-document.getElementById("share-btn").addEventListener("click", async () => {
+async function receiptImageFile() {
   const node = document.getElementById("receipt-print-area");
   const canvas = await html2canvas(node, { scale: 3, backgroundColor: "#ffffff" });
-  canvas.toBlob(async (blob) => {
-    const file = new File([blob], "receipt.png", { type: "image/png" });
-    if (navigator.share && navigator.canShare && navigator.canShare({ files: [file] })) {
-      try { await navigator.share({ files: [file], title: "Receipt" }); return; } catch (e) {}
-    }
-    const a = document.createElement("a");
-    a.href = URL.createObjectURL(blob);
-    a.download = "receipt.png";
-    a.click();
-  }, "image/png");
+  const blob = await new Promise((res) => canvas.toBlob(res, "image/png"));
+  return new File([blob], "receipt.png", { type: "image/png" });
+}
+
+function downloadFile(file) {
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(file);
+  a.download = file.name;
+  a.click();
+}
+
+document.getElementById("share-btn").addEventListener("click", async () => {
+  const file = await receiptImageFile();
+  if (navigator.share && navigator.canShare && navigator.canShare({ files: [file] })) {
+    try { await navigator.share({ files: [file], title: "Receipt" }); return; } catch (e) {}
+  }
+  downloadFile(file);
+});
+
+document.getElementById("share-whatsapp-btn").addEventListener("click", async () => {
+  const file = await receiptImageFile();
+  if (navigator.share && navigator.canShare && navigator.canShare({ files: [file] })) {
+    try { await navigator.share({ files: [file], title: "Receipt", text: "Here's your receipt" }); return; } catch (e) {}
+  }
+  // Desktop fallback: browsers can't attach files to WhatsApp automatically —
+  // download the image, then open WhatsApp with a prefilled message.
+  downloadFile(file);
+  toast("Image downloaded — attach it in the WhatsApp chat that just opened");
+  window.open(`https://wa.me/?text=${encodeURIComponent("Here's your receipt (see attached image).")}`, "_blank");
+});
+
+document.getElementById("share-email-btn").addEventListener("click", async () => {
+  const file = await receiptImageFile();
+  if (navigator.share && navigator.canShare && navigator.canShare({ files: [file] })) {
+    try { await navigator.share({ files: [file], title: "Receipt", text: "Please find the receipt attached." }); return; } catch (e) {}
+  }
+  // Desktop fallback: browsers can't attach files to a mailto: link —
+  // download the image, then open the mail client so the user can attach it.
+  downloadFile(file);
+  toast("Image downloaded — attach it to the email that just opened");
+  const subject = encodeURIComponent("Receipt");
+  const body = encodeURIComponent("Please find the receipt attached.\n\n(The receipt image has been downloaded to your device — attach it to this email.)");
+  window.location.href = `mailto:?subject=${subject}&body=${body}`;
 });
 
 // ---------- Personal Finance Tracker (sub-app) ----------
@@ -728,12 +774,13 @@ document.getElementById("budget-form").addEventListener("submit", async (e) => {
   e.preventDefault();
   const category = document.getElementById("budget-category").value;
   const monthly_limit = Number(document.getElementById("budget-amount").value || 0);
+  const note = document.getElementById("budget-note").value.trim();
   if (!monthly_limit) return toast("Enter a budget amount");
   const btn = e.target.querySelector("button[type=submit]");
   btn.disabled = true; btn.textContent = "Saving…";
   const { data, error } = await sb
     .from("budgets")
-    .upsert({ user_id: state.user.id, category, monthly_limit }, { onConflict: "user_id,category" })
+    .upsert({ user_id: state.user.id, category, monthly_limit, note }, { onConflict: "user_id,category" })
     .select()
     .single();
   btn.disabled = false; btn.textContent = "Set budget";
@@ -741,6 +788,7 @@ document.getElementById("budget-form").addEventListener("submit", async (e) => {
   const idx = state.budgets.findIndex((b) => b.category === category);
   if (idx >= 0) state.budgets[idx] = data; else state.budgets.push(data);
   document.getElementById("budget-amount").value = "";
+  document.getElementById("budget-note").value = "";
   toast("Budget saved");
   renderFinance();
 });
@@ -781,7 +829,7 @@ function renderBudgets() {
     row.className = "budget-item";
     row.innerHTML = `
       <div class="budget-top">
-        <div class="budget-cat">${escapeHtml(b.category)}</div>
+        <div class="budget-cat">${escapeHtml(b.category)}${b.note ? ` <span style="font-weight:400;color:var(--slate);font-size:.82rem">— ${escapeHtml(b.note)}</span>` : ""}</div>
         <div class="budget-nums">${fmt(spent)} of ${fmt(limit)}${over ? ` — <span class="over">over by ${fmt(spent - limit)}</span>` : ` — ${fmt(remaining)} left`}</div>
       </div>
       <div class="budget-track"><div class="budget-fill ${fillClass}" style="width:${pct}%"></div></div>
@@ -789,6 +837,104 @@ function renderBudgets() {
     `;
     row.querySelector("[data-bdel]").addEventListener("click", () => deleteBudget(b.id));
     list.appendChild(row);
+  });
+}
+
+// ---------- Inventory / Stock ----------
+document.getElementById("inventory-form").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const editId = document.getElementById("inv-edit-id").value;
+  const payload = {
+    user_id: state.user.id,
+    item_name: document.getElementById("inv-name").value.trim(),
+    category: document.getElementById("inv-category").value.trim(),
+    quantity: Number(document.getElementById("inv-qty").value || 0),
+    unit_price: Number(document.getElementById("inv-price").value || 0),
+    low_stock_alert: Number(document.getElementById("inv-low").value || 0),
+    updated_at: new Date().toISOString(),
+  };
+  if (!payload.item_name) return toast("Enter an item name");
+  const btn = document.getElementById("inv-submit-btn");
+  btn.disabled = true; btn.textContent = editId ? "Saving…" : "Adding…";
+  let data, error;
+  if (editId) {
+    ({ data, error } = await sb.from("inventory_items").update(payload).eq("id", editId).eq("user_id", state.user.id).select().single());
+  } else {
+    ({ data, error } = await sb.from("inventory_items").insert(payload).select().single());
+  }
+  btn.disabled = false; btn.textContent = "Add item";
+  if (error) return toast("Could not save item: " + error.message);
+  if (editId) {
+    const idx = state.inventory.findIndex((i) => i.id === editId);
+    if (idx >= 0) state.inventory[idx] = data;
+  } else {
+    state.inventory.push(data);
+  }
+  state.inventory.sort((a, b) => a.item_name.localeCompare(b.item_name));
+  resetInventoryForm();
+  toast(editId ? "Item updated" : "Item added");
+  renderInventory();
+});
+
+function resetInventoryForm() {
+  document.getElementById("inventory-form").reset();
+  document.getElementById("inv-edit-id").value = "";
+  document.getElementById("inv-submit-btn").textContent = "Add item";
+}
+
+function editInventoryItem(id) {
+  const item = state.inventory.find((i) => i.id === id);
+  if (!item) return;
+  document.getElementById("inv-edit-id").value = item.id;
+  document.getElementById("inv-name").value = item.item_name;
+  document.getElementById("inv-category").value = item.category || "";
+  document.getElementById("inv-qty").value = item.quantity;
+  document.getElementById("inv-price").value = item.unit_price;
+  document.getElementById("inv-low").value = item.low_stock_alert || "";
+  document.getElementById("inv-submit-btn").textContent = "Save changes";
+  document.getElementById("inventory-form").scrollIntoView({ behavior: "smooth", block: "center" });
+}
+
+async function deleteInventoryItem(id) {
+  if (!confirm("Remove this item from inventory?")) return;
+  const { error } = await sb.from("inventory_items").delete().eq("id", id).eq("user_id", state.user.id);
+  if (error) return toast("Delete failed");
+  state.inventory = state.inventory.filter((i) => i.id !== id);
+  renderInventory();
+  toast("Item removed");
+}
+
+function renderInventory() {
+  const items = state.inventory;
+  const totalUnits = items.reduce((s, i) => s + Number(i.quantity), 0);
+  const totalValue = items.reduce((s, i) => s + Number(i.quantity) * Number(i.unit_price), 0);
+  document.getElementById("inv-total-items").textContent = items.length;
+  document.getElementById("inv-total-units").textContent = totalUnits.toLocaleString("en-UG");
+  document.getElementById("inv-total-value").textContent = fmt(totalValue);
+
+  const tbody = document.getElementById("inventory-table-body");
+  if (!items.length) {
+    tbody.innerHTML = `<tr><td colspan="6" class="mono" style="color:var(--slate);padding:1em 0">No stock items yet — add one above, or skip this and keep typing items directly on your receipts.</td></tr>`;
+    return;
+  }
+  tbody.innerHTML = "";
+  items.forEach((i) => {
+    const low = i.low_stock_alert > 0 && Number(i.quantity) <= Number(i.low_stock_alert);
+    const tr = document.createElement("tr");
+    tr.innerHTML = `
+      <td>${escapeHtml(i.item_name)}</td>
+      <td class="col-hide-mobile">${escapeHtml(i.category || "—")}</td>
+      <td>${low ? `<span style="color:var(--red);font-weight:700">${i.quantity} ⚠</span>` : i.quantity}</td>
+      <td>${fmt(i.unit_price)}</td>
+      <td class="col-hide-mobile">${fmt(Number(i.quantity) * Number(i.unit_price))}</td>
+      <td style="white-space:nowrap">
+        <button class="btn btn-outline btn-sm" data-iedit="${i.id}">Edit</button>
+        <button class="btn btn-danger btn-sm" data-idel="${i.id}">Delete</button>
+      </td>
+    `;
+    tr.querySelector("[data-iedit]").addEventListener("click", () => editInventoryItem(i.id));
+    tr.querySelector("[data-idel]").addEventListener("click", () => deleteInventoryItem(i.id));
+    tbody.appendChild(tr);
   });
 }
 

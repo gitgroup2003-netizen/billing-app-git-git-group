@@ -116,6 +116,10 @@
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 1v22M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6"/></svg>
       <span class="nav-text">Finance</span>
     </button>
+    <button class="nav-link" data-nav="inventory">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 8L12 3 3 8l9 5 9-5z"/><path d="M3 8v8l9 5 9-5V8"/><path d="M12 13v8"/></svg>
+      <span class="nav-text">Inventory</span>
+    </button>
     <button class="nav-link" data-nav="analytics">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 3v18h18"/><path d="M7 15l4-5 3 3 5-7"/></svg>
       <span class="nav-text">Analytics</span>
@@ -265,6 +269,8 @@
               <button class="btn btn-amber btn-sm" id="save-receipt-btn">Save &amp; Print</button>
               <button class="btn btn-outline btn-sm" id="print-btn">Print only</button>
               <button class="btn btn-outline btn-sm" id="share-btn">Share / Save image</button>
+              <button class="btn btn-outline btn-sm" id="share-whatsapp-btn">Share via WhatsApp</button>
+              <button class="btn btn-outline btn-sm" id="share-email-btn">Share via Email</button>
             </div>
           </div>
           <div class="card" style="margin-top:1rem">
@@ -275,6 +281,7 @@
               <button class="btn btn-outline btn-sm" data-paper="58mm">58mm thermal</button>
               <button class="btn btn-outline btn-sm" data-paper="a4">A4 / Letter</button>
             </div>
+            <div class="sub" style="margin-top:.6rem">Works with wireless, WiFi, and Bluetooth printers too — as long as the printer is paired/connected to this device through its normal system settings, it'll show up in the print dialog when you hit Print.</div>
           </div>
         </div>
       </div>
@@ -338,6 +345,10 @@
           <div class="field" style="margin-bottom:0;flex:1;min-width:130px">
             <label>Monthly limit</label>
             <input type="number" id="budget-amount" min="0" step="1" required />
+          </div>
+          <div class="field" style="margin-bottom:0;flex:2;min-width:180px">
+            <label>Description (optional)</label>
+            <input type="text" id="budget-note" placeholder="e.g. Loan repayment, School fees" />
           </div>
           <button class="btn btn-amber" type="submit">Set budget</button>
         </form>
@@ -418,6 +429,69 @@
     <!-- Hidden print target for the monthly finance report -->
     <div id="finance-report-print-area" style="display:none"></div>
 
+    <!-- INVENTORY / STOCK -->
+    <section id="view-inventory" class="view">
+      <div class="topbar">
+        <div>
+          <h2>Inventory</h2>
+          <div class="sub">Track your stock, quantities and prices — totally optional, you can still type items straight into a receipt without this</div>
+        </div>
+      </div>
+
+      <div class="stats-grid" style="grid-template-columns:repeat(3,1fr)">
+        <div class="stat-card">
+          <div class="label">Items tracked</div>
+          <div class="value" id="inv-total-items">0</div>
+        </div>
+        <div class="stat-card">
+          <div class="label">Units in stock</div>
+          <div class="value" id="inv-total-units">0</div>
+        </div>
+        <div class="stat-card">
+          <div class="label">Stock value</div>
+          <div class="value amber" id="inv-total-value">UGX 0</div>
+        </div>
+      </div>
+
+      <div class="card" style="margin-bottom:1.4rem">
+        <label style="margin-bottom:.7rem">Add / update item</label>
+        <form id="inventory-form" style="display:flex;gap:.6rem;flex-wrap:wrap;align-items:flex-end">
+          <div class="field" style="margin-bottom:0;flex:2;min-width:160px">
+            <label>Item name</label>
+            <input type="text" id="inv-name" placeholder="e.g. Rice 2kg bag" required />
+          </div>
+          <div class="field" style="margin-bottom:0;flex:1;min-width:120px">
+            <label>Category</label>
+            <input type="text" id="inv-category" placeholder="e.g. Groceries" />
+          </div>
+          <div class="field" style="margin-bottom:0;flex:1;min-width:100px">
+            <label>Quantity</label>
+            <input type="number" id="inv-qty" min="0" step="1" required />
+          </div>
+          <div class="field" style="margin-bottom:0;flex:1;min-width:120px">
+            <label>Unit price</label>
+            <input type="number" id="inv-price" min="0" step="1" required />
+          </div>
+          <div class="field" style="margin-bottom:0;flex:1;min-width:110px">
+            <label>Low-stock alert</label>
+            <input type="number" id="inv-low" min="0" step="1" placeholder="e.g. 5" />
+          </div>
+          <input type="hidden" id="inv-edit-id" />
+          <button class="btn btn-amber" type="submit" id="inv-submit-btn">Add item</button>
+        </form>
+      </div>
+
+      <div class="card">
+        <label style="margin-bottom:.7rem">Stock list</label>
+        <div class="data-table">
+          <table>
+            <thead><tr><th>Item</th><th class="col-hide-mobile">Category</th><th>Qty</th><th>Unit price</th><th class="col-hide-mobile">Total value</th><th></th></tr></thead>
+            <tbody id="inventory-table-body"></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
     <!-- ANALYTICS -->
     <section id="view-analytics" class="view">
       <div class="topbar">
@@ -493,6 +567,10 @@
   <button class="nav-link" data-nav="finance">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 1v22M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6"/></svg>
     <span>Finance</span>
+  </button>
+  <button class="nav-link" data-nav="inventory">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 8L12 3 3 8l9 5 9-5z"/><path d="M3 8v8l9 5 9-5V8"/><path d="M12 13v8"/></svg>
+    <span>Stock</span>
   </button>
   <button class="nav-link" data-nav="analytics">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 3v18h18"/><path d="M7 15l4-5 3 3 5-7"/></svg>

@@ -326,15 +326,16 @@ body.paper-a4 #receipt-print-area{ width:100%; max-width:480px; margin:0 auto; }
   #bottom-nav{
     display:flex; position:sticky; bottom:0; z-index:20;
     background:var(--ink); border-top:1px solid rgba(255,255,255,.12);
-    padding:.3rem .2rem calc(.3rem + env(safe-area-inset-bottom));
+    padding:.3rem .1rem calc(.3rem + env(safe-area-inset-bottom));
+    overflow-x:auto; -webkit-overflow-scrolling:touch;
   }
   #bottom-nav .nav-link{
-    flex:1; flex-direction:column; gap:.15em; font-size:.62rem; padding:.4em .1em;
-    text-align:center; margin:0; border-radius:8px; color:#9FADC8;
+    flex:1 0 auto; flex-direction:column; gap:.15em; font-size:.6rem; padding:.4em .05em;
+    text-align:center; margin:0; border-radius:8px; color:#9FADC8; min-width:46px;
   }
-  #bottom-nav .nav-link svg{ width:19px; height:19px; margin:0 auto; }
+  #bottom-nav .nav-link svg{ width:18px; height:18px; margin:0 auto; }
   #bottom-nav .nav-link.active{ background:transparent; color:var(--amber-2); }
-  #bottom-nav .nav-link span{ line-height:1; }
+  #bottom-nav .nav-link span{ line-height:1; white-space:nowrap; }
 
   .auth-wrap{ grid-template-columns:1fr; border-radius:12px; }
   .auth-brand{ padding:1.6rem 1.4rem; }
